@@ -112,7 +112,7 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
         # Set up device info
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"{self._room_name} Tado Local Offset",
+            name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,
             model=MODEL,
             sw_version="0.1.0",
