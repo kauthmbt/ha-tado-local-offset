@@ -1,8 +1,7 @@
 {
   "name": "Tado Local Offset",
   "content_in_root": false,
-  "filename": "tado_local_offset.zip",
   "homeassistant": "2024.1.0",
   "render_readme": true,
-  "zip_release": true
+  "zip_release": false
 }
