@@ -245,11 +245,10 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class TadoLocalOffsetOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Tado Local Offset."""
+"""Handle options flow for Tado Local Offset."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
+    # Die __init__ wurde entfernt, da self.config_entry automatisch von 
+    # der Basisklasse bereitgestellt wird.
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -258,25 +257,31 @@ class TadoLocalOffsetOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Get current values from config entry
-        current_tolerance = self.config_entry.options.get(
-            CONF_TOLERANCE,
-            self.config_entry.data.get(CONF_TOLERANCE, DEFAULT_TOLERANCE)
-        )
-        current_backoff = self.config_entry.options.get(
-            CONF_BACKOFF_MINUTES,
-            self.config_entry.data.get(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)
-        )
+        # Wir laden die aktuellen Werte (entweder aus den Options oder den Start-Daten)
+        options = self.config_entry.options
+        data = self.config_entry.data
+
+        def get_val(key, default):
+            return options.get(key, data.get(key, default))
 
         data_schema = vol.Schema({
-            vol.Optional(
-                CONF_TOLERANCE,
-                default=current_tolerance
-            ): vol.All(vol.Coerce(float), vol.Range(min=MIN_TOLERANCE, max=MAX_TOLERANCE)),
-            vol.Optional(
-                CONF_BACKOFF_MINUTES,
-                default=current_backoff
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_BACKOFF, max=MAX_BACKOFF)),
+            # Battery Saver & Tolerance
+            vol.Optional(CONF_ENABLE_BATTERY_SAVER, default=get_val(CONF_ENABLE_BATTERY_SAVER, True)): bool,
+            vol.Optional(CONF_TOLERANCE, default=get_val(CONF_TOLERANCE, DEFAULT_TOLERANCE)): 
+                vol.All(vol.Coerce(float), vol.Range(min=MIN_TOLERANCE, max=MAX_TOLERANCE)),
+            vol.Optional(CONF_BACKOFF_MINUTES, default=get_val(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)): 
+                vol.All(vol.Coerce(int), vol.Range(min=MIN_BACKOFF, max=MAX_BACKOFF)),
+            
+            # Window Detection
+            vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=get_val(CONF_ENABLE_WINDOW_DETECTION, False)): bool,
+            vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=get_val(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
+            vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=get_val(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): 
+                vol.All(vol.Coerce(float), vol.Range(min=0.5, max=3.0)),
+            
+            # Pre-heat
+            vol.Optional(CONF_ENABLE_PREHEAT, default=get_val(CONF_ENABLE_PREHEAT, False)): bool,
+            vol.Optional(CONF_LEARNING_BUFFER, default=get_val(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): 
+                vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
         })
 
         return self.async_show_form(
