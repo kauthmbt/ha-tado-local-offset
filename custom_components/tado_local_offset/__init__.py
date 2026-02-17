@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -10,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_TARGET_TEMPERATURE,
@@ -40,7 +42,7 @@ SERVICE_RESET_LEARNING_SCHEMA = vol.Schema(
 SERVICE_SET_PREHEAT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
-        vol.Required(ATTR_TARGET_TIME): cv.datetime,
+        vol.Required(ATTR_TARGET_TIME): cv.time,  # Geändert von datetime auf time
         vol.Required(ATTR_TARGET_TEMPERATURE): vol.Coerce(float),
     }
 )
@@ -94,25 +96,14 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def handle_force_compensation(call: ServiceCall) -> None:
         """Handle force compensation service call."""
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-
-        # Get all coordinators
         coordinators = hass.data[DOMAIN].values()
 
-        # Filter by entity_id if specified
         if entity_ids:
-            # Get climate entity IDs for filtering
-            climate_entity_ids = set()
-            for coordinator in coordinators:
-                climate_entity_id = f"climate.{coordinator.room_name.lower().replace(' ', '_')}_virtual"
-                climate_entity_ids.add(climate_entity_id)
-
-            # Only process coordinators whose climate entities were specified
             coordinators = [
                 coord for coord in coordinators
                 if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
             ]
 
-        # Execute force compensation
         for coordinator in coordinators:
             await coordinator.async_force_compensation()
             await coordinator.async_request_refresh()
@@ -120,23 +111,14 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def handle_reset_learning(call: ServiceCall) -> None:
         """Handle reset learning service call."""
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-
-        # Get all coordinators
         coordinators = hass.data[DOMAIN].values()
 
-        # Filter by entity_id if specified
         if entity_ids:
-            climate_entity_ids = set()
-            for coordinator in coordinators:
-                climate_entity_id = f"climate.{coordinator.room_name.lower().replace(' ', '_')}_virtual"
-                climate_entity_ids.add(climate_entity_id)
-
             coordinators = [
                 coord for coord in coordinators
                 if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
             ]
 
-        # Execute reset learning
         for coordinator in coordinators:
             await coordinator.async_reset_learning()
             await coordinator.async_request_refresh()
@@ -144,71 +126,60 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def handle_set_preheat(call: ServiceCall) -> None:
         """Handle set preheat service call."""
         entity_id = call.data[ATTR_ENTITY_ID]
-        target_time = call.data[ATTR_TARGET_TIME]
+        target_time_only = call.data[ATTR_TARGET_TIME]
         target_temperature = call.data[ATTR_TARGET_TEMPERATURE]
 
         # Find coordinator for this entity
         coordinators = hass.data[DOMAIN].values()
-        coordinator = None
-
-        for coord in coordinators:
-            climate_entity_id = f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual"
-            if climate_entity_id == entity_id:
-                coordinator = coord
-                break
+        coordinator = next(
+            (c for c in coordinators if f"climate.{c.room_name.lower().replace(' ', '_')}_virtual" == entity_id),
+            None
+        )
 
         if not coordinator:
             _LOGGER.error("No coordinator found for entity %s", entity_id)
             return
 
-        # Calculate time until target
-        from homeassistant.util import dt as dt_util
-        now = dt_util.utcnow()
-        time_until = (target_time - now).total_seconds() / 60  # minutes
+        # Logik für reine Uhrzeit: Berechne Zieldatum (heute oder morgen)
+        now = dt_util.now()
+        target_datetime = datetime.combine(now.date(), target_time_only)
+        target_datetime = dt_util.as_local(target_datetime)
 
-        if time_until <= 0:
-            _LOGGER.warning("Target time is in the past")
-            return
+        if target_datetime <= now:
+            target_datetime += timedelta(days=1)
 
-        # Calculate pre-heat start time
+        # Umrechnung in Minuten bis zum Ziel
+        time_until = (target_datetime - now).total_seconds() / 60
+
+        # Calculate pre-heat start time basierend auf gelernter Heizrate
         preheat_minutes = coordinator._calculate_preheat_minutes()
 
-        # If we need to start pre-heating now or in the future
         if preheat_minutes >= time_until:
-            # Start immediately
+            # Start sofort
             await coordinator.async_set_desired_temperature(target_temperature)
             _LOGGER.info(
-                "Started pre-heat for %s to reach %.1f°C by %s",
+                "Started pre-heat for %s to reach %.1f°C by %s (Uhrzeit erkannt als %s)",
                 coordinator.room_name,
                 target_temperature,
-                target_time,
+                target_time_only,
+                target_datetime,
             )
         else:
             _LOGGER.info(
-                "Pre-heat for %s will start in %.0f minutes (%.0f minutes before target time)",
+                "Pre-heat for %s will start in %.0f minutes (%.0f minutes before target %s)",
                 coordinator.room_name,
                 time_until - preheat_minutes,
                 preheat_minutes,
+                target_time_only,
             )
 
     # Register services
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_FORCE_COMPENSATION,
-        handle_force_compensation,
-        schema=SERVICE_FORCE_COMPENSATION_SCHEMA,
+        DOMAIN, SERVICE_FORCE_COMPENSATION, handle_force_compensation, schema=SERVICE_FORCE_COMPENSATION_SCHEMA
     )
-
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_RESET_LEARNING,
-        handle_reset_learning,
-        schema=SERVICE_RESET_LEARNING_SCHEMA,
+        DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning, schema=SERVICE_RESET_LEARNING_SCHEMA
     )
-
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_PREHEAT,
-        handle_set_preheat,
-        schema=SERVICE_SET_PREHEAT_SCHEMA,
+        DOMAIN, SERVICE_SET_PREHEAT, handle_set_preheat, schema=SERVICE_SET_PREHEAT_SCHEMA
     )

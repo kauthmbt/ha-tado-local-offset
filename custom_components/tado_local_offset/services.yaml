@@ -47,9 +47,9 @@ set_preheat:
       name: Target time
       description: When the room should reach target temperature.
       required: true
-      example: "2024-01-15 07:00:00"
+      example: "07:00:00"
       selector:
-        datetime:
+        time: # Geändert von datetime zu time
     target_temperature:
       name: Target temperature
       description: Desired temperature in Celsius.
