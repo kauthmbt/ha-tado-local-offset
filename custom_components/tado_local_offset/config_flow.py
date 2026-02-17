@@ -114,7 +114,7 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="window_detection",
             data_schema=vol.Schema({
                 vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=False): bool,
-                vol.Optional(CONF_WINDOW_SENSOR): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")),
+                vol.Optional(CONF_WINDOW_SENSOR, ""): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")),
                 vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=False): bool,
                 vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=DEFAULT_TEMP_DROP_THRESHOLD): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=3.0)),
             }),
