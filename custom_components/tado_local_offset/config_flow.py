@@ -250,38 +250,70 @@ class TadoLocalOffsetOptionsFlow(config_entries.OptionsFlow):
     # Die __init__ wurde entfernt, da self.config_entry automatisch von 
     # der Basisklasse bereitgestellt wird.
 
-    async def async_step_init(
+async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Manage the options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Wir laden die aktuellen Werte (entweder aus den Options oder den Start-Daten)
+        # Aktuelle Werte aus options oder data laden
         options = self.config_entry.options
         data = self.config_entry.data
 
-        def get_val(key, default):
+        def get_val(key, default=None):
             return options.get(key, data.get(key, default))
 
         data_schema = vol.Schema({
-            # Battery Saver & Tolerance
-            vol.Optional(CONF_ENABLE_BATTERY_SAVER, default=get_val(CONF_ENABLE_BATTERY_SAVER, True)): bool,
-            vol.Optional(CONF_TOLERANCE, default=get_val(CONF_TOLERANCE, DEFAULT_TOLERANCE)): 
-                vol.All(vol.Coerce(float), vol.Range(min=MIN_TOLERANCE, max=MAX_TOLERANCE)),
-            vol.Optional(CONF_BACKOFF_MINUTES, default=get_val(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)): 
-                vol.All(vol.Coerce(int), vol.Range(min=MIN_BACKOFF, max=MAX_BACKOFF)),
+            # --- Sensoren ---
+            vol.Required(
+                CONF_EXTERNAL_TEMP_SENSOR, 
+                default=get_val(CONF_EXTERNAL_TEMP_SENSOR)
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            ),
+            vol.Optional(
+                CONF_WINDOW_SENSOR, 
+                default=get_val(CONF_WINDOW_SENSOR)
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")
+            ),
+
+            # --- Battery Saver & Steuerung ---
+            vol.Optional(
+                CONF_ENABLE_BATTERY_SAVER, 
+                default=get_val(CONF_ENABLE_BATTERY_SAVER, True)
+            ): bool,
+            vol.Optional(
+                CONF_TOLERANCE, 
+                default=get_val(CONF_TOLERANCE, DEFAULT_TOLERANCE)
+            ): vol.All(vol.Coerce(float), vol.Range(min=MIN_TOLERANCE, max=MAX_TOLERANCE)),
+            vol.Optional(
+                CONF_BACKOFF_MINUTES, 
+                default=get_val(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)
+            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_BACKOFF, max=MAX_BACKOFF)),
             
-            # Window Detection
-            vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=get_val(CONF_ENABLE_WINDOW_DETECTION, False)): bool,
-            vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=get_val(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
-            vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=get_val(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): 
-                vol.All(vol.Coerce(float), vol.Range(min=0.5, max=3.0)),
-            
-            # Pre-heat
-            vol.Optional(CONF_ENABLE_PREHEAT, default=get_val(CONF_ENABLE_PREHEAT, False)): bool,
-            vol.Optional(CONF_LEARNING_BUFFER, default=get_val(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): 
-                vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
+            # --- Erkennung & Pre-heat ---
+            vol.Optional(
+                CONF_ENABLE_WINDOW_DETECTION, 
+                default=get_val(CONF_ENABLE_WINDOW_DETECTION, False)
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_TEMP_DROP_DETECTION, 
+                default=get_val(CONF_ENABLE_TEMP_DROP_DETECTION, False)
+            ): bool,
+            vol.Optional(
+                CONF_TEMP_DROP_THRESHOLD, 
+                default=get_val(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=3.0)),
+            vol.Optional(
+                CONF_ENABLE_PREHEAT, 
+                default=get_val(CONF_ENABLE_PREHEAT, False)
+            ): bool,
+            vol.Optional(
+                CONF_LEARNING_BUFFER, 
+                default=get_val(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)
+            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=50)),
         })
 
         return self.async_show_form(
