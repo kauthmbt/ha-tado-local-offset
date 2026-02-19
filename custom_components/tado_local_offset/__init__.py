@@ -168,7 +168,7 @@ def async_register_services(hass: HomeAssistant) -> None:
         now = dt_util.now()
         # Kombiniere heutiges Datum mit der Ziel-Uhrzeit
         # target_datetime = datetime.combine(now.date(), target_time_only, now.tzinfo)
-        target_datetime = datetime.combine(now.date(), target_time).replace(tzinfo=now.tzinfo)
+        target_datetime = datetime.combine(now.date(), target_time_only).replace(tzinfo=now.tzinfo)
 
         # Falls Uhrzeit bereits vorbei ist, plane es für morgen ein
         if target_datetime <= now:
@@ -195,7 +195,7 @@ def async_register_services(hass: HomeAssistant) -> None:
             )
         else:
             _LOGGER.info(
-                "Pre-heat for %s scheduled: Start in %.0f minutes",
+                "Pre-heat for %s scheduled: Start at %s (in %.0f minutes)",
                 coordinator.room_name,
                 preheat_start.strftime("%H:%M:%S"),
                 time_until - preheat_minutes,
