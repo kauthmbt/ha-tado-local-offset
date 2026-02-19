@@ -257,7 +257,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Initialer Abgleich beim Start
         if self._last_sent_compensated_target is None:
             if abs(self.data.desired_temp - tado_target) > 0.1:
-                self.data.desired_temp = tado_target
+                # Wir ziehen den aktuellen Offset ab, um den echten Wunschwert zu finden
+                self.data.desired_temp = round(tado_target - self.data.offset, 1)
             return False
 
         # Erkennung einer externen Änderung (Schwellenwert 0.4°C)
