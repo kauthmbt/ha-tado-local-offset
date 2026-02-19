@@ -245,53 +245,34 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             raise UpdateFailed(f"Error updating Tado Local Offset data: {err}") from err
 
     def _detect_external_target_change(self) -> bool:
-        """Detect if Tado's target was changed externally (schedule, manual, app).
-
-        Compares the real Tado target against the last value this integration
-        sent. If they differ, someone else changed the target — sync it back
-        as the new desired temperature so schedules and manual adjustments
-        on the physical device are respected.
-
-        Returns True if an external change was detected and desired_temp updated.
-        """
+        """Erkennt Änderungen am Tado-Thermostat (App, Zeitplan, Drehrad)."""
         tado_target = self.data.tado_target
 
-        # Skip detection during cooldown after our own compensation,
-        # because HomeKit state may not have propagated yet
+        # Abkühlzeit nach eigener Änderung prüfen
         if self._last_compensation_time:
             elapsed = (dt_util.utcnow() - self._last_compensation_time).total_seconds()
             if elapsed < self._external_change_cooldown:
                 return False
 
-        # Initial sync: we haven't sent any compensation yet,
-        # so adopt whatever the real Tado is currently set to
+        # Initialer Abgleich beim Start
         if self._last_sent_compensated_target is None:
             if abs(self.data.desired_temp - tado_target) > 0.1:
-                self.logger.info(
-                    "Initial sync %s: desired_temp %.1f°C → %.1f°C (from Tado)",
-                    self.room_name,
-                    self.data.desired_temp,
-                    tado_target,
-                )
-                self.data.desired_temp = tado_target
+                # Wir ziehen den aktuellen Offset ab, um den echten Wunschwert zu finden
+                self.data.desired_temp = round(tado_target - self.data.offset, 1)
             return False
 
-        # Compare Tado's actual target against what we last sent.
-        # Tado uses 0.5°C steps, so a threshold > 0.4 avoids rounding noise
-        # while catching any real change (minimum 0.5°C step).
+        # Erkennung einer externen Änderung (Schwellenwert 0.4°C)
         if abs(tado_target - self._last_sent_compensated_target) > 0.4:
-            self.logger.info(
-                "External target change detected for %s: "
-                "Tado target=%.1f°C (we sent %.1f°C). "
-                "Updating desired_temp → %.1f°C",
-                self.room_name,
-                tado_target,
-                self._last_sent_compensated_target,
-                tado_target,
+            # WICHTIG: Den Offset abziehen, um das wahre neue Soll zu erhalten
+            new_desired = round(tado_target - self.data.offset, 1)
+            
+            _LOGGER.info(
+                "Externe Änderung für %s: Tado Ziel=%.1f°C -> Neues Soll: %.1f°C",
+                self.room_name, tado_target, new_desired
             )
-            self.data.desired_temp = tado_target
-            # Reset so compensation re-evaluates with the new desired_temp
-            self._last_sent_compensated_target = None
+            
+            self.data.desired_temp = new_desired
+            self._last_sent_compensated_target = None 
             return True
 
         return False
@@ -537,3 +518,50 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     async def _async_save_data(self) -> None:
         """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
         await self._store.async_save({"history": self.data.heating_history})
+    
+    async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
+        """Berechnet die Kompensation und sendet sie aktiv an das Tado-Gerät."""
+        if self.data.window_open and not self.data.window_override:
+            return
+
+        now = dt_util.utcnow()
+        
+        # Backoff-Timer prüfen (außer bei force=True)
+        if not force and self._last_compensation_time:
+            if now < self._last_compensation_time + timedelta(minutes=self.backoff_minutes):
+                return
+
+        # Berechne das Ziel für Tado und runde auf 0,5 °C Schritte
+        raw_target = self.data.desired_temp + self.data.offset
+        compensated_target = round(raw_target * 2) / 2
+        
+        # Toleranzprüfung
+        current_tado_target = self.data.tado_target
+        diff = abs(compensated_target - current_tado_target)
+        
+        if not force and diff < self.tolerance:
+            _LOGGER.debug("Änderung zu klein (%.2f < %.2f)", diff, self.tolerance)
+            return
+
+        # --- DIESER BEFEHL STEUERT DAS ECHTE THERMOSTAT ---
+        _LOGGER.info("Sende an %s: %.1f°C", self.room_name, compensated_target)
+
+        await self.hass.services.async_call(
+            "climate",
+            "set_temperature",
+            {
+                "entity_id": self.tado_climate_entity,
+                "temperature": compensated_target,
+            },
+            blocking=True,
+        )
+
+        self._last_sent_compensated_target = compensated_target
+        self._last_compensation_time = now
+        self.data.compensated_target = compensated_target
+
+    async def async_set_desired_temperature(self, temperature: float) -> None:
+        """Wird aufgerufen, wenn du den Regler in Home Assistant verschiebst."""
+        self.data.desired_temp = temperature
+        # Sofort senden ohne Wartezeit
+        await self.async_calculate_and_apply_compensation(force=True)
