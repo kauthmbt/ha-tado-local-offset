@@ -44,7 +44,7 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
         key="heating_rate",
         name="Heating Rate",
         state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=f"{UnitOfTemperature.CELSIUS}/min",
+        native_unit_of_measurement=f"{UnitOfTemperature.CELSIUS}/h",
         suggested_display_precision=3,
         icon="mdi:speedometer",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -79,6 +79,12 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         value_fn=lambda data: data.last_update,
+    ),
+    TadoLocalOffsetSensorDescription(
+        key="next_preheat",
+        name="Next Pre-heat Start",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda data: data.next_preheat_start,
     ),
 )
 

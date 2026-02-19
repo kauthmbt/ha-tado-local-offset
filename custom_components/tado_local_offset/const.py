@@ -35,7 +35,7 @@ DEFAULT_LEARNING_BUFFER: Final = 10
 DEFAULT_MIN_PREHEAT_MINUTES: Final = 15
 DEFAULT_MAX_PREHEAT_MINUTES: Final = 120
 DEFAULT_DESIRED_TEMP: Final = 20.0
-DEFAULT_HEATING_RATE: Final = 0.1  # °C per minute
+DEFAULT_HEATING_RATE: Final = 1.0  # °C per hour
 
 # Update intervals
 UPDATE_INTERVAL: Final = timedelta(seconds=30)
@@ -49,8 +49,8 @@ MAX_TOLERANCE: Final = 2.0
 MIN_BACKOFF: Final = 5
 MAX_BACKOFF: Final = 60
 MAX_OFFSET: Final = 5.0  # Maximum allowed offset to prevent invalid targets
-MIN_HEATING_RATE: Final = 0.05
-MAX_HEATING_RATE: Final = 1.0
+MIN_HEATING_RATE: Final = 0.1
+MAX_HEATING_RATE: Final = 2.5
 MAX_HEATING_CYCLES: Final = 20  # Keep last 20 cycles for learning
 
 # Temperature drop detection

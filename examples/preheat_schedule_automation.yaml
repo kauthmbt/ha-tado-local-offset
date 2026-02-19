@@ -19,7 +19,7 @@ automations:
       - service: tado_local_offset.set_preheat
         data:
           entity_id: climate.bedroom_tado_local_offset
-          target_time: "{{ today_at('07:00') }}"
+          target_time: "07:00:00"
           target_temperature: 21.0
 
   # ============================================
@@ -56,7 +56,7 @@ automations:
       - service: tado_local_offset.set_preheat
         data:
           entity_id: climate.living_room_tado_local_offset
-          target_time: "{{ today_at('18:30') }}"
+          target_time: "18:30:00"
           target_temperature: 22.0
 
   # ============================================
@@ -100,7 +100,7 @@ automations:
       - service: tado_local_offset.set_preheat
         data:
           entity_id: climate.bedroom_tado_local_offset
-          target_time: "{{ today_at('07:00') }}"
+          target_time: "07:00:00"
           target_temperature: 21.0
 
   - alias: "Bedroom Weekend Morning Pre-heat"

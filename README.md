@@ -154,7 +154,7 @@ Manually trigger pre-heat for upcoming schedule.
 service: tado_local_offset.set_preheat
 data:
   entity_id: climate.bedroom_tado_local_offset
-  target_time: "2024-01-15 07:00:00"
+  target_time: "07:00:00"
   target_temperature: 21.0
 ```
 

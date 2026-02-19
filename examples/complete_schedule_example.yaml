@@ -27,7 +27,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.bedroom_tado_local_offset
-        target_time: "{{ today_at('06:30') }}"
+        target_time: "06:30:00"
         target_temperature: 21.0
 
 # Morning: Wake up to warm room (WEEKENDS)
@@ -44,7 +44,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.bedroom_tado_local_offset
-        target_time: "{{ today_at('08:30') }}"
+        target_time: "08:30:00"
         target_temperature: 20.0
 
 # Day: Lower temperature after leaving (WEEKDAYS)
@@ -96,7 +96,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.living_room_tado_local_offset
-        target_time: "{{ today_at('07:00') }}"
+        target_time: "07:00:00"
         target_temperature: 20.0
 
 # Morning: Later wake-up (WEEKENDS)
@@ -113,7 +113,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.living_room_tado_local_offset
-        target_time: "{{ today_at('09:00') }}"
+        target_time: "09:00:00"
         target_temperature: 21.0
 
 # Day: Economy mode (WEEKDAYS - at work)
@@ -147,7 +147,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.living_room_tado_local_offset
-        target_time: "{{ today_at('18:00') }}"
+        target_time: "18:00:00"
         target_temperature: 22.0
 
 # Evening: Cozy temperature (ALL DAYS)
@@ -196,7 +196,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.office_tado_local_offset
-        target_time: "{{ today_at('08:30') }}"
+        target_time: "08:30:00"
         target_temperature: 21.0
 
 # Lunch break: Lower slightly
@@ -230,7 +230,7 @@
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.office_tado_local_offset
-        target_time: "{{ today_at('13:00') }}"
+        target_time: "13:00:00"
         target_temperature: 21.0
 
 # Evening: Work done, lower temp
@@ -374,12 +374,12 @@ morning_preheat_all:
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.bedroom_tado_local_offset
-        target_time: "{{ today_at('07:00') }}"
+        target_time: "07:00:00"
         target_temperature: 21.0
     - service: tado_local_offset.set_preheat
       data:
         entity_id: climate.living_room_tado_local_offset
-        target_time: "{{ today_at('07:30') }}"
+        target_time: "07:30:00"
         target_temperature: 20.0
 
 # Night mode: Lower all rooms

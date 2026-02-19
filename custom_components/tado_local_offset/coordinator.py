@@ -1,7 +1,7 @@
 """Data update coordinator for Tado Local Offset."""
 from __future__ import annotations
-
-from dataclasses import dataclass, field
+import logging
+from dataclasses import dataclass, field, KW_ONLY
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -15,6 +15,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+# persistente Speicherung des Lernens
+from homeassistant.helpers.storage import Store
+# ------------------------------------
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -52,19 +55,23 @@ from .const import (
     UPDATE_INTERVAL,
 )
 
+# Neue Konstanten für den Speicher
+STORAGE_KEY = f"{DOMAIN}_storage"
+STORAGE_VERSION = 1
 
+_LOGGER = logging.getLogger(__name__) # Falls er hier schon steht, einfach lassen
+# ---------------------
 @dataclass
-class HeatingCycle:
-    """Represents a single heating cycle for learning."""
-
-    start_time: datetime
-    end_time: datetime
-    start_temp: float
-    end_temp: float
-    duration_minutes: float
-    temp_rise: float
-    rate: float  # °C per minute
-
+#class HeatingCycle:
+#    """Represents a single heating cycle for learning."""
+#
+#    start_time: datetime
+#    end_time: datetime
+#    start_temp: float
+#    end_temp: float
+#    duration_minutes: float
+#    temp_rise: float
+#    rate: float  # °C per minute
 
 @dataclass
 class TadoLocalOffsetData:
@@ -81,11 +88,16 @@ class TadoLocalOffsetData:
     window_open: bool = False
     heating_rate: float = DEFAULT_HEATING_RATE
     preheat_minutes: int = 0
-    last_update: datetime = field(default_factory=dt_util.utcnow)
-    heating_history: list[HeatingCycle] = field(default_factory=list)
     compensation_enabled: bool = True
     battery_saver_enabled: bool = True
     window_override: bool = False
+    
+    # Dies ist eine spezielle Markierung für Python 3.13
+    _: KW_ONLY 
+    
+    last_update: datetime = field(default_factory=dt_util.utcnow)
+    heating_history: list[Any] = field(default_factory=list)
+    next_preheat_start: datetime | None = field(default=None)
 
 
 class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
@@ -93,9 +105,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def __init__(self, hass: HomeAssistant, entry: dict[str, Any]) -> None:
         """Initialize the coordinator."""
+        # 1. Zuerst den Speicher initialisieren!
+        # STORAGE_VERSION und STORAGE_KEY müssen oben in der Datei definiert sein
+        self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
+
+        # 2. Dann den super().__init__ aufrufen
         super().__init__(
             hass,
-            logger := __import__("logging").getLogger(__name__),
+            _LOGGER,
             name=f"{DOMAIN}_{entry.data[CONF_ROOM_NAME]}",
             update_interval=UPDATE_INTERVAL,
         )
@@ -126,7 +143,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._last_sent_compensated_target: float | None = None
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
+        self._heating_external_start_temp: float | None = None # NEU
         self._temp_history: list[tuple[datetime, float]] = []
+        self._is_heating = False # NEU: Damit wir wissen, ob wir gerade heizen
 
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
@@ -166,7 +185,33 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self.data.hvac_mode = tado_climate_state.state
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
-
+            # --- NEU: Live-Learning für 5-Minuten-Sensoren ---
+            current_hvac = self.data.hvac_action
+            if current_hvac == "heating":
+                if self._heating_start_time is None:
+                    # Zyklus-Start: Zeit und EXTERNE Temp festhalten
+                    self._heating_start_time = dt_util.utcnow()
+                    # WICHTIG: Wir speichern die externe Temperatur als Startpunkt, 
+                    # da diese sich nicht durch Offset-Sprünge ändert.
+                    self._heating_start_temp = self.data.external_temp 
+                    _LOGGER.info("Heizzyklus-Lernen gestartet bei %.2f°C (Extern)", self.data.external_temp)
+                else:
+                    # Live-Berechnung während der Heizphase
+                    # Wir übergeben die aktuelle externe Temperatur an die Berechnung
+                    instant_rate = self._calculate_instant_heating_rate(self.data.external_temp)
+                    
+                    if instant_rate is not None:
+                        # Glättung über den Learning-Buffer
+                        alpha = self.learning_buffer / 100
+                        # Berechnung erfolgt in °C pro Stunde
+                        self.data.heating_rate = round((self.data.heating_rate * (1 - alpha)) + (instant_rate * alpha), 4)
+            else:
+                # Heizung aus oder idle: Startwerte zurücksetzen
+                if self._heating_start_time is not None:
+                     _LOGGER.info("Heizzyklus-Lernen beendet.")
+                self._heating_start_time = None
+                self._heating_start_temp = None
+            # --- ENDE NEU ---
             # Calculate offset
             self.data.offset = external_temp - tado_temp
 
@@ -181,7 +226,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self.data.window_open = self._check_window_open()
 
             # Track heating cycles for learning
-            self._track_heating_cycle()
+            # self._track_heating_cycle()
 
             # Calculate pre-heat time if enabled
             if self.enable_preheat:
@@ -303,85 +348,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             drop_rate > TEMP_DROP_RATE_THRESHOLD
         )
 
-    def _track_heating_cycle(self) -> None:
-        """Track heating cycles for learning."""
-        hvac_action = self.data.hvac_action
-
-        # Heating started
-        if hvac_action == "heating" and self._heating_start_time is None:
-            self._heating_start_time = dt_util.utcnow()
-            self._heating_start_temp = self.data.external_temp
-
-        # Heating stopped - record cycle
-        elif hvac_action != "heating" and self._heating_start_time is not None:
-            self._record_heating_cycle()
-
-    def _record_heating_cycle(self) -> None:
-        """Record a completed heating cycle."""
-        if self._heating_start_time is None or self._heating_start_temp is None:
-            return
-
-        end_time = dt_util.utcnow()
-        end_temp = self.data.external_temp
-
-        # Calculate cycle metrics
-        duration = (end_time - self._heating_start_time).total_seconds() / 60  # minutes
-        temp_rise = end_temp - self._heating_start_temp
-
-        # Validate cycle (must be meaningful)
-        if duration < 5 or temp_rise < 0.2:
-            self._heating_start_time = None
-            self._heating_start_temp = None
-            return
-
-        # Calculate rate
-        rate = temp_rise / duration
-
-        # Validate rate (filter outliers)
-        if not (MIN_HEATING_RATE <= rate <= MAX_HEATING_RATE):
-            self._heating_start_time = None
-            self._heating_start_temp = None
-            return
-
-        # Create cycle record
-        cycle = HeatingCycle(
-            start_time=self._heating_start_time,
-            end_time=end_time,
-            start_temp=self._heating_start_temp,
-            end_temp=end_temp,
-            duration_minutes=duration,
-            temp_rise=temp_rise,
-            rate=rate,
-        )
-
-        # Add to history
-        self.data.heating_history.append(cycle)
-
-        # Keep only recent cycles
-        if len(self.data.heating_history) > MAX_HEATING_CYCLES:
-            self.data.heating_history.pop(0)
-
-        # Update heating rate
-        self._update_heating_rate()
-
-        # Reset tracking
-        self._heating_start_time = None
-        self._heating_start_temp = None
-
-    def _update_heating_rate(self) -> None:
-        """Calculate weighted average heating rate from history."""
-        if not self.data.heating_history:
-            self.data.heating_rate = DEFAULT_HEATING_RATE
-            return
-
-        # Weighted average (recent cycles weighted more)
-        rates = [cycle.rate for cycle in self.data.heating_history]
-        weights = [1 + (i * 0.1) for i in range(len(rates))]
-
-        weighted_sum = sum(r * w for r, w in zip(rates, weights))
-        weight_total = sum(weights)
-
-        self.data.heating_rate = weighted_sum / weight_total
 
     def _calculate_preheat_minutes(self) -> int:
         """Calculate minutes needed to reach desired temperature."""
@@ -520,3 +486,54 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     def set_window_override(self, override: bool) -> None:
         """Set window detection override."""
         self.data.window_override = override
+
+    def _calculate_instant_heating_rate(self, current_external_temp: float) -> float | None:
+        """Berechnet die Heizrate basierend auf dem externen Sensor (immun gegen Offset-Sprünge)."""
+        if self._heating_start_time is None or self._heating_start_temp is None:
+            return None
+
+        now = dt_util.utcnow()
+        duration_hrs = (now - self._heating_start_time).total_seconds() / 3600
+        
+        # WICHTIG: temp_diff basiert hier auf dem externen Sensorwert, 
+        # der beim Heizstart in self._heating_start_temp eingefroren wurde.
+        temp_diff = current_external_temp - self._heating_start_temp
+
+        # Filter für stabiles Lernen: 
+        # Mind. 20 Min Laufzeit (0.33h) und 0.1°C Anstieg am EXTERNEN Sensor.
+        if duration_hrs < 0.33 or temp_diff < 0.1:
+            return None
+
+        # Die Rate ist nun Grad pro Stunde (°C/h)
+        instant_rate = temp_diff / duration_hrs
+        
+        # 1. Den neuen Wert zur Historie hinzufügen
+        self.data.heating_history.append(instant_rate)
+        
+        # 2. Die Liste auf die maximale Anzahl begrenzen (aus const.py)
+        from .const import MAX_HEATING_CYCLES, MIN_HEATING_RATE, MAX_HEATING_RATE
+        if len(self.data.heating_history) > MAX_HEATING_CYCLES:
+            self.data.heating_history.pop(0)
+
+        # 3. Den neuen Durchschnitt berechnen
+        self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
+
+        # 4. Persistent speichern (JSON)
+        self.hass.async_create_task(self._async_save_data())
+
+        # 5. Validierung gegen Grenzwerte
+        if MIN_HEATING_RATE <= instant_rate <= MAX_HEATING_RATE:
+            return instant_rate
+            
+        return None
+
+    async def async_load_data(self) -> None:
+        """Lädt die historische Heizrate beim Start aus dem JSON-Speicher."""
+        stored_data = await self._store.async_load()
+        if stored_data and "history" in stored_data:
+            self.data.heating_history = stored_data["history"]
+            _LOGGER.info("Historische Heizdaten für %s geladen", self.room_name)
+
+    async def _async_save_data(self) -> None:
+        """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
+        await self._store.async_save({"history": self.data.heating_history})

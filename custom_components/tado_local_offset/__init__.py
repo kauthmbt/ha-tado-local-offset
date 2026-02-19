@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -53,6 +54,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create coordinator
     coordinator = TadoLocalOffsetCoordinator(hass, entry)
 
+    # 2. Die gespeicherten JSON-Daten laden, bevor die Sensoren erstellt werden
+    await coordinator.async_load_data()
+    # ---------------------------
+    
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
 
@@ -96,13 +101,19 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def handle_force_compensation(call: ServiceCall) -> None:
         """Handle force compensation service call."""
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-        coordinators = hass.data[DOMAIN].values()
-
-        if entity_ids:
-            coordinators = [
-                coord for coord in coordinators
-                if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
-            ]
+        ent_reg = er.async_get(hass) # Registry laden
+        
+        # Wenn keine entity_ids angegeben wurden, nehmen wir alle Coordinatoren dieser Domain
+        if not entity_ids:
+            coordinators = list(hass.data[DOMAIN].values())
+        else:
+            coordinators = []
+            for ent_id in entity_ids:
+                entry = ent_reg.async_get(ent_id)
+                if entry and entry.config_entry_id in hass.data[DOMAIN]:
+                    coordinators.append(hass.data[DOMAIN][entry.config_entry_id])
+                else:
+                    _LOGGER.warning("Entity %s gehört nicht zu Tado Local Offset", ent_id)
 
         for coordinator in coordinators:
             await coordinator.async_force_compensation()
@@ -111,67 +122,87 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def handle_reset_learning(call: ServiceCall) -> None:
         """Handle reset learning service call."""
         entity_ids = call.data.get(ATTR_ENTITY_ID)
-        coordinators = hass.data[DOMAIN].values()
+        ent_reg = er.async_get(hass) # Registry laden
 
-        if entity_ids:
-            coordinators = [
-                coord for coord in coordinators
-                if f"climate.{coord.room_name.lower().replace(' ', '_')}_virtual" in entity_ids
-            ]
+        if not entity_ids:
+            coordinators = list(hass.data[DOMAIN].values())
+        else:
+            coordinators = []
+            for ent_id in entity_ids:
+                entry = ent_reg.async_get(ent_id)
+                if entry and entry.config_entry_id in hass.data[DOMAIN]:
+                    coordinators.append(hass.data[DOMAIN][entry.config_entry_id])
 
         for coordinator in coordinators:
             await coordinator.async_reset_learning()
             await coordinator.async_request_refresh()
 
     async def handle_set_preheat(call: ServiceCall) -> None:
-        """Handle set preheat service call."""
+        """Handle set_preheat service call."""
+        # Wir holen uns die Entity Registry von HA
+        ent_reg = er.async_get(hass)
+        
+        # Entity ID aus dem Call (kann eine Liste oder ein String sein)
         entity_id = call.data[ATTR_ENTITY_ID]
         target_time_only = call.data[ATTR_TARGET_TIME]
         target_temperature = call.data[ATTR_TARGET_TEMPERATURE]
 
-        # Find coordinator for this entity
-        coordinators = hass.data[DOMAIN].values()
-        coordinator = next(
-            (c for c in coordinators if f"climate.{c.room_name.lower().replace(' ', '_')}_virtual" == entity_id),
-            None
-        )
-
-        if not coordinator:
-            _LOGGER.error("No coordinator found for entity %s", entity_id)
+        # 1. Finde den Registry-Eintrag für die aufgerufene Entity
+        entry_data = ent_reg.async_get(entity_id)
+        
+        if not entry_data:
+            _LOGGER.error("Entity %s not found in registry", entity_id)
             return
 
-        # Logik für reine Uhrzeit: Berechne Zieldatum (heute oder morgen)
-        now = dt_util.now()
-        target_datetime = datetime.combine(now.date(), target_time_only)
-        target_datetime = dt_util.as_local(target_datetime)
+        # 2. Hole die Entry ID (die Verknüpfung zur Instanz der Integration)
+        entry_id = entry_data.config_entry_id
+        
+        # 3. Den Coordinator aus den HA-Daten fischen
+        coordinator: TadoLocalOffsetCoordinator = hass.data[DOMAIN].get(entry_id)
 
+        if not coordinator:
+            _LOGGER.error("No coordinator found for entity %s (Entry ID: %s)", entity_id, entry_id)
+            return
+
+        # --- AB HIER FOLGT DEINE BESTEHENDE LOGIK ---
+        now = dt_util.now()
+        # Kombiniere heutiges Datum mit der Ziel-Uhrzeit
+        # target_datetime = datetime.combine(now.date(), target_time_only, now.tzinfo)
+        target_datetime = datetime.combine(now.date(), target_time_only).replace(tzinfo=now.tzinfo)
+
+        # Falls Uhrzeit bereits vorbei ist, plane es für morgen ein
         if target_datetime <= now:
             target_datetime += timedelta(days=1)
 
-        # Umrechnung in Minuten bis zum Ziel
         time_until = (target_datetime - now).total_seconds() / 60
-
-        # Calculate pre-heat start time basierend auf gelernter Heizrate
         preheat_minutes = coordinator._calculate_preheat_minutes()
+        
+        # --- NEU: Startzeit berechnen und im Coordinator speichern ---
+        preheat_start = target_datetime - timedelta(minutes=preheat_minutes)
+        coordinator.data.next_preheat_start = preheat_start
+        # --------------------------------------------------------------
 
         if preheat_minutes >= time_until:
-            # Start sofort
+            # Wenn es sofort losgeht, können wir den Planer-Eintrag wieder leeren
+            coordinator.data.next_preheat_start = None
+            
             await coordinator.async_set_desired_temperature(target_temperature)
             _LOGGER.info(
-                "Started pre-heat for %s to reach %.1f°C by %s (Uhrzeit erkannt als %s)",
+                "Started pre-heat for %s to reach %.1f°C by %s",
                 coordinator.room_name,
                 target_temperature,
                 target_time_only,
-                target_datetime,
             )
         else:
             _LOGGER.info(
-                "Pre-heat for %s will start in %.0f minutes (%.0f minutes before target %s)",
+                "Pre-heat for %s scheduled: Start at %s (in %.0f minutes)",
                 coordinator.room_name,
+                preheat_start.strftime("%H:%M:%S"),
                 time_until - preheat_minutes,
-                preheat_minutes,
-                target_time_only,
             )
+
+        # Den Coordinator zwingen, die Sensoren in der UI sofort zu aktualisieren
+        await coordinator.async_request_refresh()
 
     # Register services
     hass.services.async_register(
