@@ -531,8 +531,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             if now < self._last_compensation_time + timedelta(minutes=self.backoff_minutes):
                 return
 
-        # Berechne das Ziel für Tado (Wunschtemp + berechneter Offset)
-        compensated_target = round(self.data.desired_temp + self.data.offset, 1)
+        # Berechne das Ziel für Tado und runde auf 0,5 °C Schritte
+        raw_target = self.data.desired_temp + self.data.offset
+        compensated_target = round(raw_target * 2) / 2
         
         # Toleranzprüfung
         current_tado_target = self.data.tado_target
