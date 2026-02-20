@@ -1,0 +1,87 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Basis-Konfiguration",
+        "description": "Grunddaten für die Temperaturkompensation festlegen.",
+        "data": {
+          "room_name": "Raumname",
+          "tado_device": "Tado Thermostat (HomeKit)",
+          "external_temp_sensor": "Externer Temperatursensor"
+        },
+        "data_description": {
+          "room_name": "Z.B. 'Wohnzimmer'",
+          "tado_device": "Das über HomeKit eingebundene Tado-Gerät",
+          "external_temp_sensor": "Der Sensor, der die 'echte' Raumtemperatur liefert"
+        }
+      },
+      "window_detection": {
+        "title": "Fenster-Erkennung",
+        "description": "Wie soll das System auf offene Fenster reagieren?",
+        "data": {
+          "enable_window_detection": "Fenster-Sensor nutzen",
+          "window_sensor": "Binärer Fenster-Sensor",
+          "enable_temp_drop_detection": "Sturz-Erkennung aktiv",
+          "temp_drop_threshold": "Abfall-Limit (°C)"
+        }
+      },
+      "advanced_settings": {
+        "title": "Erweiterte Einstellungen",
+        "description": "Feintuning für Batterie und Vorheizen.",
+        "data": {
+          "enable_battery_saver": "Batteriesparmodus",
+          "tolerance": "Toleranz (°C)",
+          "backoff_minutes": "Wartezeit (Minuten)",
+          "enable_preheat": "Vorheizen (Lernfunktion)",
+          "learning_buffer": "Zeit-Puffer (%)",
+          "min_preheat_minutes": "Min. Vorheizzeit",
+          "max_preheat_minutes": "Max. Vorheizzeit"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Einstellungen anpassen",
+        "data": {
+          "tolerance": "Temperatur-Toleranz (°C)",
+          "backoff_minutes": "Wartezeit (Minuten)",
+          "enable_battery_saver": "Batteriesparmodus",
+          "enable_window_detection": "Fenster-Sensor nutzen",
+          "window_sensor": "Fenster-Sensor Entität",
+          "enable_temp_drop_detection": "Abfall-Erkennung",
+          "temp_drop_threshold": "Schwellenwert (°C)",
+          "enable_preheat": "Vorheizen aktivieren",
+          "learning_buffer": "Lern-Puffer (%)",
+          "min_preheat_minutes": "Min. Vorheizzeit (Min)",
+          "max_preheat_minutes": "Max. Vorheizzeit (Min)"
+        }
+      }
+    }
+  },
+  "services": {
+    "force_compensation": {
+      "name": "Korrektur erzwingen",
+      "description": "Offset sofort ohne Wartezeit senden."
+    },
+    "reset_learning": {
+      "name": "Lernen zurücksetzen",
+      "description": "Gelernten Durchschnitt löschen."
+    },
+    "set_preheat": {
+      "name": "Vorheizen planen",
+      "description": "Startzeitpunkt basierend auf Zielzeit berechnen.",
+      "fields": {
+        "target_time": {
+          "name": "Ziel-Zeit",
+          "description": "Wann soll die Temperatur erreicht sein?"
+        },
+        "target_temperature": {
+          "name": "Ziel-Temperatur",
+          "description": "Gewünschte Wärme in Grad Celsius."
+        }
+      }
+    }
+  }
+}
