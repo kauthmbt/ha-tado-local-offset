@@ -20,9 +20,9 @@
         "description": "Wie soll das System auf offene Fenster reagieren?",
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Binärer Fenster-Sensor",
-          "enable_temp_drop_detection": "Sturz-Erkennung aktiv",
-          "temp_drop_threshold": "Abfall-Limit (°C)"
+          "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl möglich)",
+          "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
+          "temp_drop_threshold": "Temperaturabfall-Limit (°C)"
         }
       },
       "advanced_settings": {
@@ -50,7 +50,7 @@
           "enable_battery_saver": "Batteriesparmodus",
           "enable_window_detection": "Fenster-Sensor nutzen",
           "window_sensor": "Fenster-Sensor Entität",
-          "enable_temp_drop_detection": "Abfall-Erkennung",
+          "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Schwellenwert (°C)",
           "enable_preheat": "Vorheizen aktivieren",
           "learning_buffer": "Lern-Puffer (%)",
