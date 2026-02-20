@@ -2,108 +2,32 @@
   "config": {
     "step": {
       "user": {
-        "title": "Tado Local Offset: Basis-Daten",
-        "description": "Konfigurieren Sie die Temperaturkompensation für einen Raum mit einem Tado Heizkörper-Thermostat.",
+        "title": "Add Tado Local Offset Room",
         "data": {
-          "room_name": "Raumname",
-          "tado_device": "Tado Thermostat (HomeKit)",
-          "external_temp_sensor": "Externer Temperatursensor"
-        },
-        "data_description": {
-          "room_name": "Name für diesen Raum (z.B. 'Schlafzimmer', 'Wohnzimmer')",
-          "tado_device": "Wählen Sie Ihr Tado-Gerät aus der HomeKit-Integration aus",
-          "external_temp_sensor": "Ein präziser Temperaturfühler im Raum (z.B. Zigbee/Z-Wave)"
+          "room_name": "Room name",
+          "tado_device": "Tado device",
+          "external_temp_sensor": "External sensor"
         }
       },
       "window_detection": {
-        "title": "Fenster-Erkennung",
-        "description": "Konfigurieren Sie den automatischen Heizstopp bei offenen Fenstern.",
+        "title": "Window Detection",
         "data": {
-          "enable_window_detection": "Fenster-Erkennung aktivieren",
-          "window_sensor": "Fenster-Kontaktsensor (optional)",
-          "enable_temp_drop_detection": "Temperaturabfall-Erkennung",
-          "temp_drop_threshold": "Abfall-Schwellenwert (°C)"
-        },
-        "data_description": {
-          "enable_window_detection": "Nutzt einen physischen Sensor zur Erkennung",
-          "window_sensor": "Binärer Sensor, der anzeigt, ob das Fenster offen ist",
-          "enable_temp_drop_detection": "Erkennt offene Fenster durch plötzlichen Temperatursturz",
-          "temp_drop_threshold": "Temperaturabfall in °C innerhalb von 5 Min, der den Stopp auslöst"
+          "enable_window_detection": "Enable window detection",
+          "window_sensor": "Window sensor",
+          "enable_temp_drop_detection": "Enable drop detection",
+          "temp_drop_threshold": "Threshold"
         }
       },
       "advanced_settings": {
-        "title": "Erweiterte Einstellungen & Pre-heat",
-        "description": "Feineinstellungen für den Betrieb und das intelligente Vorheizen.",
+        "title": "Advanced Settings",
         "data": {
-          "enable_battery_saver": "Batteriesparmodus aktivieren",
-          "tolerance": "Temperatur-Toleranz (°C)",
-          "backoff_minutes": "Update-Wartezeit (Minuten)",
-          "enable_preheat": "Intelligentes Vorheizen aktivieren",
-          "learning_buffer": "Lern-Puffer (%)",
-          "min_preheat_minutes": "Minimale Vorheizzeit (Min)",
-          "max_preheat_minutes": "Maximale Vorheizzeit (Min)"
-        },
-        "data_description": {
-          "enable_battery_saver": "Reduziert Funkbefehle an Tado, um die Batterien zu schonen",
-          "tolerance": "Kompensiert erst, wenn der Offset diesen Wert überschreitet",
-          "backoff_minutes": "Mindestzeit zwischen zwei Korrekturbefehlen",
-          "enable_preheat": "Nutzt die gelernte Heizrate, um den Raum rechtzeitig warm zu haben",
-          "learning_buffer": "Zusätzliche Zeit als Sicherheitsmarge (Prozent)",
-          "min_preheat_minutes": "Kürzeste erlaubte Vorheizdauer",
-          "max_preheat_minutes": "Längste erlaubte Vorheizdauer"
-        }
-      }
-    },
-    "error": {
-      "device_not_found": "Das gewählte Gerät wurde nicht gefunden.",
-      "no_climate_entity": "Keine Climate-Entität für dieses Tado-Gerät gefunden.",
-      "no_temp_sensor": "Kein Temperatursensor für dieses Gerät gefunden."
-    },
-    "abort": {
-      "already_configured": "Dieser Raum ist bereits konfiguriert."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Tado Local Offset Optionen",
-        "description": "Alle Einstellungen für diesen Raum anpassen.",
-        "data": {
-          "tolerance": "Temperatur-Toleranz (°C)",
-          "backoff_minutes": "Update-Wartezeit (Minuten)",
-          "enable_battery_saver": "Batteriesparmodus",
-          "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Fenster-Sensor Entität",
-          "enable_temp_drop_detection": "Abfall-Erkennung",
-          "temp_drop_threshold": "Schwellenwert (°C)",
-          "enable_preheat": "Vorheizen aktivieren",
-          "learning_buffer": "Lern-Puffer (%)",
-          "min_preheat_minutes": "Min. Vorheizzeit (Min)",
-          "max_preheat_minutes": "Max. Vorheizzeit (Min)"
-        }
-      }
-    }
-  },
-  "services": {
-    "force_compensation": {
-      "name": "Korrektur erzwingen",
-      "description": "Erzwingt ein sofortiges Update des Offsets unter Umgehung der Wartezeit."
-    },
-    "reset_learning": {
-      "name": "Lernwerte zurücksetzen",
-      "description": "Löscht die Historie der Heizzyklen und startet das Lernen neu."
-    },
-    "set_preheat": {
-      "name": "Vorheizen planen",
-      "description": "Plant einen Vorheizvorgang basierend auf der gelernten Heizrate.",
-      "fields": {
-        "target_time": {
-          "name": "Ziel-Uhrzeit",
-          "description": "Wann der Raum warm sein soll (HH:MM:SS)."
-        },
-        "target_temperature": {
-          "name": "Ziel-Temperatur",
-          "description": "Gewünschte Temperatur in °C."
+          "enable_battery_saver": "Battery saver",
+          "tolerance": "Tolerance",
+          "backoff_minutes": "Backoff",
+          "enable_preheat": "Enable pre-heat",
+          "learning_buffer": "Learning buffer",
+          "min_preheat_minutes": "Min pre-heat",
+          "max_preheat_minutes": "Max pre-heat"
         }
       }
     }
