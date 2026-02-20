@@ -125,12 +125,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.tado_temp_sensor = entry.data[CONF_TADO_TEMP_SENSOR]
         self.tado_humidity_sensor = entry.data.get(CONF_TADO_HUMIDITY_SENSOR)
         self.external_temp_sensor = entry.data[CONF_EXTERNAL_TEMP_SENSOR]
-        self.window_sensor = entry.data.get(CONF_WINDOW_SENSOR)
 
         # Configuration
-        self.enable_window_detection = entry.data.get(CONF_ENABLE_WINDOW_DETECTION, False)
         self.enable_temp_drop_detection = entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
-        self.temp_drop_threshold = entry.data.get(CONF_TEMP_DROP_THRESHOLD, 1.0)
         self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
         self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
         self.enable_preheat = entry.data.get(CONF_ENABLE_PREHEAT, False)
@@ -153,6 +150,30 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Initialize data
         self.data = TadoLocalOffsetData()
 
+        # --- Fenster-Sensor Initialisierung ---
+        self.window_sensor = entry.options.get(
+            CONF_WINDOW_SENSOR, 
+            entry.data.get(CONF_WINDOW_SENSOR, [])
+        )
+        
+        # Sicherheits-Check: Falls noch ein alter einzelner String gespeichert ist, 
+        # wandle ihn in eine Liste um.
+        if isinstance(self.window_sensor, str):
+            if self.window_sensor == "":
+                self.window_sensor = []
+            else:
+                self.window_sensor = [self.window_sensor]
+        
+        # Sicherstellen, dass die Flags korrekt gesetzt sind
+        self.enable_window_detection = entry.options.get(
+            CONF_ENABLE_WINDOW_DETECTION,
+            entry.data.get(CONF_ENABLE_WINDOW_DETECTION, False)
+        )
+        self.enable_temp_drop_detection = entry.options.get(
+            CONF_ENABLE_TEMP_DROP_DETECTION,
+            entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
+        )
+        
     async def _async_update_data(self) -> TadoLocalOffsetData:
         """Fetch data from sensors and calculate compensation."""
         try:
@@ -290,16 +311,26 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         ]
 
     def _check_window_open(self) -> bool:
-        """Check if window is open via sensor or temperature drop."""
-        # Check physical sensor first
+        """Check if any window is open via sensors or temperature drop."""
+        # 1. Physikalische Sensoren prüfen
         if self.enable_window_detection and self.window_sensor:
-            window_state = self.hass.states.get(self.window_sensor)
-            if window_state and window_state.state == STATE_ON:
-                return True
+            # Wir stellen sicher, dass wir immer eine Liste haben
+            sensors = self.window_sensor
+            if isinstance(sensors, str):
+                sensors = [sensors]
 
-        # Check temperature drop detection
+            for sensor_id in sensors:
+                window_state = self.hass.states.get(sensor_id)
+                if window_state and window_state.state == STATE_ON:
+                    _LOGGER.debug("Fenster offen erkannt durch Sensor: %s", sensor_id)
+                    return True
+
+        # 2. Temperatursturz-Erkennung prüfen
         if self.enable_temp_drop_detection:
-            return self._detect_temperature_drop()
+            # Wenn der Sturz erkannt wurde, geben wir True zurück
+            if self._detect_temperature_drop():
+                _LOGGER.debug("Fenster offen erkannt durch Temperatursturz")
+                return True
 
         return False
 
@@ -353,57 +384,74 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         await self.async_calculate_and_apply_compensation()
 
     async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
-        """Calculate and apply temperature compensation."""
-        # Check if compensation should run
-        if not force and not self._should_compensate():
+        """Berechnet die Temperaturkorrektur und sendet sie gerundet an Tado."""
+        now = dt_util.utcnow()
+
+        # 1. Vorab-Prüfung: Sollte überhaupt etwas gesendet werden?
+        if not force:
+            # Kompensation generell deaktiviert?
+            if not self.data.compensation_enabled:
+                return
+            
+            # Fenster offen? (Prüft alle Sensoren aus deiner neuen Liste)
+            if self.data.window_open and not self.data.window_override:
+                _LOGGER.debug("Kompensation übersprungen: Fenster/Tür ist offen")
+                return
+
+            # Battery Saver: Backoff-Zeit (Wartezeit) prüfen
+            if self.data.battery_saver_enabled and self._last_compensation_time:
+                if now < self._last_compensation_time + timedelta(minutes=self.backoff_minutes):
+                    _LOGGER.debug("Battery Saver: Wartezeit noch nicht abgelaufen")
+                    return
+
+        # 2. Zielwert berechnen
+        # raw_target ist der exakte mathematische Wert (z.B. 21.234)
+        raw_target = self.data.desired_temp + self.data.offset
+        
+        # WICHTIG: Tado/HomeKit akzeptiert meist nur 0,5°C Schritte.
+        # Wir runden hier kaufmännisch auf die nächste 0,5er Stelle.
+        compensated_target = round(raw_target * 2) / 2
+        
+        # Sicherheitsgrenzen: Tado erlaubt meist 5°C bis 25°C
+        compensated_target = max(5.0, min(25.0, compensated_target))
+
+        # 3. Toleranzprüfung (Vergleich mit dem Ist-Zustand am Thermostat)
+        current_tado_target = self.data.tado_target
+        diff = abs(compensated_target - current_tado_target)
+        
+        # Nur senden, wenn die Änderung größer als deine eingestellte Toleranz ist
+        if not force and diff < self.tolerance:
+            _LOGGER.debug(
+                "Änderung zu klein (%.2f < %.2f), sende kein Update an Tado", 
+                diff, self.tolerance
+            )
             return
 
-        # Calculate compensated target
-        offset = self.data.offset
-
-        # Cap offset to prevent extreme values
-        offset = max(-MAX_OFFSET, min(MAX_OFFSET, offset))
-
-        compensated = self.data.desired_temp + offset
-
-        # Clamp to valid range
-        compensated = max(MIN_TEMP, min(MAX_TEMP, compensated))
-
-        # Store compensated target
-        self.data.compensated_target = compensated
-
-        # Check if update is needed (0.1°C threshold to avoid unnecessary updates)
-        if abs(self.data.tado_target - compensated) < 0.1:
-            return
-
-        # Apply compensation
+        # 4. Der eigentliche Befehl an das Thermostat
         try:
+            _LOGGER.info(
+                "Sende Korrektur an %s: %.1f°C (Wunsch: %.1f°C, Offset: %.1f°C)", 
+                self.room_name, compensated_target, self.data.desired_temp, self.data.offset
+            )
+
             await self.hass.services.async_call(
-                CLIMATE_DOMAIN,
-                SERVICE_SET_TEMPERATURE,
+                "climate",
+                "set_temperature",
                 {
-                    ATTR_ENTITY_ID: self.tado_climate_entity,
-                    ATTR_TEMPERATURE: compensated,
+                    "entity_id": self.tado_climate_entity,
+                    "temperature": compensated_target,
                 },
                 blocking=True,
             )
 
-            # Record what we sent and when, for external change detection
-            self._last_compensation_time = dt_util.utcnow()
-            self._last_sent_compensated_target = compensated
-
-            self.logger.info(
-                "Compensated %s: desired=%.1f°C, offset=%.1f°C, set Tado to %.1f°C",
-                self.room_name,
-                self.data.desired_temp,
-                offset,
-                compensated,
-            )
+            # Erfolgreich gesendet: Zeitstempel und Werte für das nächste Mal merken
+            self._last_sent_compensated_target = compensated_target
+            self._last_compensation_time = now
+            self.data.compensated_target = compensated_target
 
         except Exception as err:
-            self.logger.error("Failed to apply compensation: %s", err)
-            raise
-
+            _LOGGER.error("Fehler beim Senden an Tado (%s): %s", self.room_name, err)
+            
     def _should_compensate(self) -> bool:
         """Determine if compensation should be applied."""
         # Compensation disabled?
@@ -519,46 +567,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
         await self._store.async_save({"history": self.data.heating_history})
     
-    async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
-        """Berechnet die Kompensation und sendet sie aktiv an das Tado-Gerät."""
-        if self.data.window_open and not self.data.window_override:
-            return
-
-        now = dt_util.utcnow()
-        
-        # Backoff-Timer prüfen (außer bei force=True)
-        if not force and self._last_compensation_time:
-            if now < self._last_compensation_time + timedelta(minutes=self.backoff_minutes):
-                return
-
-        # Berechne das Ziel für Tado und runde auf 0,5 °C Schritte
-        raw_target = self.data.desired_temp + self.data.offset
-        compensated_target = round(raw_target * 2) / 2
-        
-        # Toleranzprüfung
-        current_tado_target = self.data.tado_target
-        diff = abs(compensated_target - current_tado_target)
-        
-        if not force and diff < self.tolerance:
-            _LOGGER.debug("Änderung zu klein (%.2f < %.2f)", diff, self.tolerance)
-            return
-
-        # --- DIESER BEFEHL STEUERT DAS ECHTE THERMOSTAT ---
-        _LOGGER.info("Sende an %s: %.1f°C", self.room_name, compensated_target)
-
-        await self.hass.services.async_call(
-            "climate",
-            "set_temperature",
-            {
-                "entity_id": self.tado_climate_entity,
-                "temperature": compensated_target,
-            },
-            blocking=True,
-        )
-
-        self._last_sent_compensated_target = compensated_target
-        self._last_compensation_time = now
-        self.data.compensated_target = compensated_target
 
     async def async_set_desired_temperature(self, temperature: float) -> None:
         """Wird aufgerufen, wenn du den Regler in Home Assistant verschiebst."""

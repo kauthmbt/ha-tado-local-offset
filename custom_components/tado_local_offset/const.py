@@ -35,7 +35,7 @@ DEFAULT_LEARNING_BUFFER: Final = 10
 DEFAULT_MIN_PREHEAT_MINUTES: Final = 15
 DEFAULT_MAX_PREHEAT_MINUTES: Final = 120
 DEFAULT_DESIRED_TEMP: Final = 20.0
-DEFAULT_HEATING_RATE: Final = 1.0  # °C per hour
+DEFAULT_HEATING_RATE: Final = 0.5  # °C per hour
 
 # Update intervals
 UPDATE_INTERVAL: Final = timedelta(seconds=30)

@@ -103,8 +103,15 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="window_detection",
             data_schema=vol.Schema({
                 vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=False): bool,
-                vol.Optional(CONF_WINDOW_SENSOR): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")
+                vol.Optional(
+                    CONF_WINDOW_SENSOR, 
+                    default=[] # Wichtig: Default ist jetzt eine Liste
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor", 
+                        device_class=["window", "door"], # Erlaubt Fenster UND Türen
+                        multiple=True # Erlaubt die Auswahl mehrerer Sensoren
+                    )
                 ),
                 vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=False): bool,
                 vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=DEFAULT_TEMP_DROP_THRESHOLD): vol.All(
@@ -155,7 +162,7 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for changing settings after creation."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+        super().__init__()
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
@@ -175,8 +182,13 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
                 ),
                 vol.Optional(CONF_ENABLE_BATTERY_SAVER, default=get_val(CONF_ENABLE_BATTERY_SAVER, True)): bool,
                 vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=get_val(CONF_ENABLE_WINDOW_DETECTION, False)): bool,
-                vol.Optional(CONF_WINDOW_SENSOR, default=get_val(CONF_WINDOW_SENSOR, "")): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")
+                # KORREKTUR HIER: Nur eine Klammer nach dem default, dann der Doppelpunkt
+                vol.Optional(CONF_WINDOW_SENSOR, default=get_val(CONF_WINDOW_SENSOR, [])): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor", 
+                        device_class=["window", "door"], 
+                        multiple=True
+                    )
                 ),
                 vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=get_val(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
                 vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=get_val(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): vol.All(
