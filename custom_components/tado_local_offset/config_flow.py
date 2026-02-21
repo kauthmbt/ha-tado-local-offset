@@ -1,153 +1,171 @@
 """Config flow for Tado Local Offset integration."""
 from __future__ import annotations
-
 import logging
 from typing import Any
-
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_BACKOFF_MINUTES,
-    CONF_ENABLE_BATTERY_SAVER,
-    CONF_ENABLE_PREHEAT,
-    CONF_ENABLE_TEMP_DROP_DETECTION,
-    CONF_ENABLE_WINDOW_DETECTION,
-    CONF_EXTERNAL_TEMP_SENSOR,
-    CONF_LEARNING_BUFFER,
-    CONF_MAX_PREHEAT_MINUTES,
-    CONF_MIN_PREHEAT_MINUTES,
-    CONF_ROOM_NAME,
-    CONF_TADO_CLIMATE_ENTITY,
-    CONF_TADO_DEVICE,
-    CONF_TADO_HUMIDITY_SENSOR,
-    CONF_TADO_TEMP_SENSOR,
-    CONF_TEMP_DROP_THRESHOLD,
-    CONF_TOLERANCE,
-    CONF_WINDOW_SENSOR,
-    DEFAULT_BACKOFF_MINUTES,
-    DEFAULT_LEARNING_BUFFER,
-    DEFAULT_MAX_PREHEAT_MINUTES,
-    DEFAULT_MIN_PREHEAT_MINUTES,
-    DEFAULT_TEMP_DROP_THRESHOLD,
-    DEFAULT_TOLERANCE,
-    DOMAIN,
-    MAX_BACKOFF,
-    MAX_TOLERANCE,
-    MIN_BACKOFF,
-    MIN_TOLERANCE,
+    CONF_BACKOFF_MINUTES, CONF_ENABLE_BATTERY_SAVER, CONF_ENABLE_PREHEAT,
+    CONF_ENABLE_TEMP_DROP_DETECTION, CONF_ENABLE_WINDOW_DETECTION,
+    CONF_EXTERNAL_TEMP_SENSOR, CONF_LEARNING_BUFFER, CONF_MAX_PREHEAT_MINUTES,
+    CONF_MIN_PREHEAT_MINUTES, CONF_ROOM_NAME, CONF_TADO_CLIMATE_ENTITY,
+    CONF_TADO_DEVICE, CONF_TADO_HUMIDITY_SENSOR, CONF_TADO_TEMP_SENSOR,
+    CONF_TEMP_DROP_THRESHOLD, CONF_TOLERANCE, CONF_WINDOW_SENSOR,
+    DEFAULT_BACKOFF_MINUTES, DEFAULT_LEARNING_BUFFER, DEFAULT_MAX_PREHEAT_MINUTES,
+    DEFAULT_MIN_PREHEAT_MINUTES, DEFAULT_TEMP_DROP_THRESHOLD, DEFAULT_TOLERANCE,
+    DOMAIN, MAX_BACKOFF, MAX_TOLERANCE, MIN_BACKOFF, MIN_TOLERANCE
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Tado Local Offset."""
-
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
-        """Handle the initial step."""
-        errors: dict[str, str] = {}
+    def __init__(self) -> None:
+        self.data: dict[str, Any] = {}
 
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Erster Schritt: Raum und Basis-Geräte."""
         if user_input is not None:
-            # Discovery-Logik zur automatischen Identifizierung der Tado-Entitäten
-            dr_reg = dr.async_get(self.hass)
-            er_reg = er.async_get(self.hass)
-            device = dr_reg.async_get(user_input[CONF_TADO_DEVICE])
-
-            if device:
-                entities = er.async_entries_for_device(er_reg, device.id)
-                climate = next((e for e in entities if e.domain == "climate"), None)
-                temp = next((e for e in entities if e.domain == "sensor" and e.original_device_class == "temperature"), None)
-                
-                if climate and temp:
-                    user_input[CONF_TADO_CLIMATE_ENTITY] = climate.entity_id
-                    user_input[CONF_TADO_TEMP_SENSOR] = temp.entity_id
-                    
-                    await self.async_set_unique_id(f"{DOMAIN}_{user_input[CONF_ROOM_NAME].lower().replace(' ', '_')}")
-                    self._abort_if_unique_id_configured()
-                    return self.async_create_entry(title=user_input[CONF_ROOM_NAME], data=user_input)
-                
-                errors["base"] = "no_tado_entities"
-            else:
-                errors["base"] = "device_not_found"
+            self.data.update(user_input)
+            
+            # Unique ID setzen, damit HA die Instanz erkennt
+            unique_id = f"tado_local_offset_{user_input[CONF_ROOM_NAME].lower().replace(' ', '_')}"
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+            
+            return await self.async_step_sensors()
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required(CONF_ROOM_NAME): str,
-                vol.Required(CONF_TADO_DEVICE): selector.DeviceSelector(),
+                vol.Required(CONF_TADO_DEVICE): selector.DeviceSelector(
+                    selector.DeviceSelectorConfig(manufacturer="HomeKit Device")
+                ),
                 vol.Required(CONF_EXTERNAL_TEMP_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
                 ),
             }),
-            errors=errors,
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
-        """Get the options flow for this handler."""
-        return TadoLocalOffsetOptionsFlow()
-
-
-class TadoLocalOffsetOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Tado Local Offset."""
-    # Keine __init__ Methode vorhanden -> Behebt AttributeError "no setter"
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
-        """Manage the options."""
+    async def async_step_sensors(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Zweiter Schritt: Bestätigung der Tado-Entitäten (Fix für null-Sensoren)."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            self.data.update(user_input)
+            return self.async_create_entry(
+                title=self.data[CONF_ROOM_NAME],
+                data=self.data,
+                options={
+                    CONF_TOLERANCE: DEFAULT_TOLERANCE,
+                    CONF_BACKOFF_MINUTES: DEFAULT_BACKOFF_MINUTES,
+                    CONF_ENABLE_BATTERY_SAVER: True,
+                }
+            )
 
-        opt = self.config_entry.options
-        dat = self.config_entry.data
-
-        def get_val(key, default=None):
-            return opt.get(key, dat.get(key, default))
+        ent_reg = er.async_get(self.hass)
+        device_id = self.data[CONF_TADO_DEVICE]
+        entities = er.async_entries_for_device(ent_reg, device_id)
+        
+        tado_climate = next((e.entity_id for e in entities if e.domain == "climate"), None)
+        tado_temp = next((e.entity_id for e in entities if e.domain == "sensor" and "temperature" in (e.device_class or "")), None)
+        if not tado_temp:
+             tado_temp = next((e.entity_id for e in entities if e.domain == "sensor" and "temperature" in e.entity_id), None)
 
         return self.async_show_form(
-            step_id="init",
+            step_id="sensors",
             data_schema=vol.Schema({
-                vol.Required(CONF_EXTERNAL_TEMP_SENSOR, default=get_val(CONF_EXTERNAL_TEMP_SENSOR)): selector.EntitySelector(
+                vol.Required(CONF_TADO_CLIMATE_ENTITY, default=tado_climate): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
+                ),
+                vol.Required(CONF_TADO_TEMP_SENSOR, default=tado_temp): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
                 ),
-                vol.Optional(
-                    CONF_WINDOW_SENSOR, 
-                    default=get_val(CONF_WINDOW_SENSOR)
-                ): vol.Maybe(
-                    selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="binary_sensor", device_class="window")
-                    )
+                vol.Optional(CONF_TADO_HUMIDITY_SENSOR): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
-                vol.Optional(CONF_ENABLE_BATTERY_SAVER, default=get_val(CONF_ENABLE_BATTERY_SAVER, True)): bool,
-                vol.Optional(CONF_TOLERANCE, default=get_val(CONF_TOLERANCE, DEFAULT_TOLERANCE)): vol.All(
+            }),
+        )
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> TadoLocalOffsetOptionsFlowHandler:
+        return TadoLocalOffsetOptionsFlowHandler(config_entry)
+
+
+class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for the integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
+        self.options = dict(config_entry.options)
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Manage the options."""
+        return await self.async_step_general_settings()
+
+    async def async_step_general_settings(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """General compensation settings."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return await self.async_step_window_detection()
+
+        return self.async_show_form(
+            step_id="general_settings",
+            data_schema=vol.Schema({
+                vol.Required(CONF_TOLERANCE, default=self.options.get(CONF_TOLERANCE, DEFAULT_TOLERANCE)): vol.All(
                     vol.Coerce(float), vol.Range(min=MIN_TOLERANCE, max=MAX_TOLERANCE)
                 ),
-                vol.Optional(CONF_BACKOFF_MINUTES, default=get_val(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)): vol.All(
+                vol.Required(CONF_BACKOFF_MINUTES, default=self.options.get(CONF_BACKOFF_MINUTES, DEFAULT_BACKOFF_MINUTES)): vol.All(
                     vol.Coerce(int), vol.Range(min=MIN_BACKOFF, max=MAX_BACKOFF)
                 ),
-                vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=get_val(CONF_ENABLE_WINDOW_DETECTION, False)): bool,
-                vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=get_val(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
-                vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=get_val(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): vol.All(
+                vol.Required(CONF_ENABLE_BATTERY_SAVER, default=self.options.get(CONF_ENABLE_BATTERY_SAVER, True)): bool,
+            }),
+        )
+
+    async def async_step_window_detection(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Window detection settings."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return await self.async_step_advanced_settings()
+
+        return self.async_show_form(
+            step_id="window_detection",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_ENABLE_WINDOW_DETECTION, default=self.options.get(CONF_ENABLE_WINDOW_DETECTION, False)): bool,
+                vol.Optional(CONF_WINDOW_SENSOR, default=self.options.get(CONF_WINDOW_SENSOR, [])): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="binary_sensor", device_class=["window", "door"], multiple=True)
+                ),
+                vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=self.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
+                vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=self.options.get(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): vol.All(
                     vol.Coerce(float), vol.Range(min=0.5, max=3.0)
                 ),
-                vol.Optional(CONF_ENABLE_PREHEAT, default=get_val(CONF_ENABLE_PREHEAT, False)): bool,
-                vol.Optional(CONF_LEARNING_BUFFER, default=get_val(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): vol.All(
+            }),
+        )
+
+    async def async_step_advanced_settings(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Advanced and Preheat settings."""
+        if user_input is not None:
+            self.options.update(user_input)
+            return self.async_create_entry(title="", data=self.options)
+
+        return self.async_show_form(
+            step_id="advanced_settings",
+            data_schema=vol.Schema({
+                vol.Optional(CONF_ENABLE_PREHEAT, default=self.options.get(CONF_ENABLE_PREHEAT, False)): bool,
+                vol.Optional(CONF_LEARNING_BUFFER, default=self.options.get(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): vol.All(
                     vol.Coerce(int), vol.Range(min=0, max=50)
                 ),
-                vol.Optional(CONF_MIN_PREHEAT_MINUTES, default=get_val(CONF_MIN_PREHEAT_MINUTES, DEFAULT_MIN_PREHEAT_MINUTES)): vol.All(
+                vol.Optional(CONF_MIN_PREHEAT_MINUTES, default=self.options.get(CONF_MIN_PREHEAT_MINUTES, DEFAULT_MIN_PREHEAT_MINUTES)): vol.All(
                     vol.Coerce(int), vol.Range(min=5, max=60)
                 ),
-                vol.Optional(CONF_MAX_PREHEAT_MINUTES, default=get_val(CONF_MAX_PREHEAT_MINUTES, DEFAULT_MAX_PREHEAT_MINUTES)): vol.All(
+                vol.Optional(CONF_MAX_PREHEAT_MINUTES, default=self.options.get(CONF_MAX_PREHEAT_MINUTES, DEFAULT_MAX_PREHEAT_MINUTES)): vol.All(
                     vol.Coerce(int), vol.Range(min=30, max=240)
                 ),
             }),
