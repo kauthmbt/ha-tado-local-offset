@@ -48,7 +48,10 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required(CONF_ROOM_NAME): str,
                 vol.Required(CONF_TADO_DEVICE): selector.DeviceSelector(
-                    selector.DeviceSelectorConfig(manufacturer="HomeKit Device")
+                    selector.DeviceSelectorConfig(
+                        integration="homekit_controller",
+                        manufacturer="tado",
+                    )
                 ),
                 vol.Required(CONF_EXTERNAL_TEMP_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="temperature")

@@ -3,102 +3,33 @@
     "step": {
       "user": {
         "title": "Add Tado Local Offset Room",
-        "description": "Configure temperature compensation for a room with a Tado Smart Radiator Thermostat.",
         "data": {
           "room_name": "Room name",
-          "tado_device": "Tado Smart Radiator Thermostat",
-          "external_temp_sensor": "External temperature sensor"
-        },
-        "data_description": {
-          "room_name": "Name for this room (e.g., 'Bedroom', 'Living Room')",
-          "tado_device": "Select your Tado device from the HomeKit integration",
-          "external_temp_sensor": "Zigbee/Z-Wave temperature sensor for accurate room temperature"
+          "tado_device": "Tado device",
+          "external_temp_sensor": "External sensor"
         }
       },
       "window_detection": {
         "title": "Window Detection",
-        "description": "Configure automatic heating shutoff when windows are opened.",
         "data": {
           "enable_window_detection": "Enable window detection",
-          "window_sensor": "Window contact sensor (optional)",
-          "enable_temp_drop_detection": "Enable temperature drop detection",
-          "temp_drop_threshold": "Temperature drop threshold (°C)"
-        },
-        "data_description": {
-          "enable_window_detection": "Use physical window sensor for detection",
-          "window_sensor": "Binary sensor that indicates window is open",
-          "enable_temp_drop_detection": "Detect open windows via sudden temperature drops",
-          "temp_drop_threshold": "Temperature drop in °C that triggers detection"
+          "window_sensor": "Window sensor",
+          "enable_temp_drop_detection": "Enable drop detection",
+          "temp_drop_threshold": "Threshold"
         }
       },
-      "battery_saver": {
-        "title": "Battery Saver Settings",
-        "description": "Configure battery-saving optimizations to reduce valve motor wear.",
+      "advanced_settings": {
+        "title": "Advanced Settings",
         "data": {
-          "enable_battery_saver": "Enable battery saver mode",
-          "tolerance": "Temperature tolerance (°C)",
-          "backoff_minutes": "Update backoff time (minutes)"
-        },
-        "data_description": {
-          "enable_battery_saver": "Reduce update frequency to extend battery life",
-          "tolerance": "Don't compensate if offset is smaller than this value",
-          "backoff_minutes": "Minimum time between compensation updates"
-        }
-      },
-      "preheat": {
-        "title": "Pre-heat Settings",
-        "description": "Configure adaptive learning for scheduled temperature changes.",
-        "data": {
-          "enable_preheat": "Enable adaptive pre-heat",
-          "learning_buffer": "Learning safety buffer (%)",
-          "min_preheat_minutes": "Minimum pre-heat time (minutes)",
-          "max_preheat_minutes": "Maximum pre-heat time (minutes)"
-        },
-        "data_description": {
-          "enable_preheat": "Learn heating rate and pre-heat before scheduled changes",
-          "learning_buffer": "Add extra time as safety margin (percentage)",
-          "min_preheat_minutes": "Shortest allowed pre-heat duration",
-          "max_preheat_minutes": "Longest allowed pre-heat duration"
+          "enable_battery_saver": "Battery saver",
+          "tolerance": "Tolerance",
+          "backoff_minutes": "Backoff",
+          "enable_preheat": "Enable pre-heat",
+          "learning_buffer": "Learning buffer",
+          "min_preheat_minutes": "Min pre-heat",
+          "max_preheat_minutes": "Max pre-heat"
         }
       }
-    },
-    "error": {
-      "device_not_found": "Selected device not found. Please try again.",
-      "no_climate_entity": "No climate entity found for this device.",
-      "no_temp_sensor": "No temperature sensor found for this device."
-    },
-    "abort": {
-      "already_configured": "This room is already configured."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Tado Local Offset Options",
-        "description": "Update battery saver settings for this room.",
-        "data": {
-          "tolerance": "Temperature tolerance (°C)",
-          "backoff_minutes": "Update backoff time (minutes)"
-        },
-        "data_description": {
-          "tolerance": "Don't compensate if offset is smaller than this value",
-          "backoff_minutes": "Minimum time between compensation updates"
-        }
-      }
-    }
-  },
-  "services": {
-    "force_compensation": {
-      "name": "Force compensation",
-      "description": "Force immediate compensation update, bypassing backoff timer."
-    },
-    "reset_learning": {
-      "name": "Reset learning",
-      "description": "Clear heating cycle history and restart learning."
-    },
-    "set_preheat": {
-      "name": "Set pre-heat",
-      "description": "Manually trigger pre-heat for upcoming schedule."
     }
   }
 }

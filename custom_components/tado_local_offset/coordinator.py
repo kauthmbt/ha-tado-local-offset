@@ -462,27 +462,34 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     _LOGGER.debug("Battery Saver: Wartezeit noch nicht abgelaufen")
                     return
 
-        # 2. Zielwert berechnen
-        # raw_target ist der exakte mathematische Wert (z.B. 21.234)
-        raw_target = self.data.desired_temp + self.data.offset
-        
-        # WICHTIG: Tado/HomeKit akzeptiert meist nur 0,5°C Schritte.
-        # Wir runden hier kaufmännisch auf die nächste 0,5er Stelle.
-        compensated_target = round(raw_target * 2) / 2
-        
-        # Sicherheitsgrenzen: Tado erlaubt meist 5°C bis 25°C
+        # 2. Zielwert berechnen (LOGIK-UPDATE)
+        # Grund-Zielwert bestimmen
+        if self.data.external_temp >= self.data.desired_temp:
+            # ZIEL ERREICHT: Wir senden exakt den Wunschwert ohne Offset-Zuschlag
+            compensated_target = float(self.data.desired_temp)
+            _LOGGER.debug("%s: Ziel erreicht (%.1f >= %.1f). Fixiere auf %.1f", 
+                         self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target)
+            
+            # WICHTIG: Wenn das Ziel erreicht ist, erzwingen wir das Update,
+            # indem wir die Toleranzprüfung überspringen (force_send = True)
+            force_send_due_to_target_reached = True
+        else:
+            # NOCH ZU KALT: Normaler Heiz-Boost mit 0,5er Rundung
+            raw_target = self.data.desired_temp + self.data.offset
+            compensated_target = round(raw_target * 2) / 2
+            force_send_due_to_target_reached = False
+
+        # Sicherheitsgrenzen einhalten
         compensated_target = max(5.0, min(25.0, compensated_target))
 
-        # 3. Toleranzprüfung (Vergleich mit dem Ist-Zustand am Thermostat)
+        # 2. Toleranzprüfung
         current_tado_target = self.data.tado_target
         diff = abs(compensated_target - current_tado_target)
         
-        # Nur senden, wenn die Änderung größer als deine eingestellte Toleranz ist
-        if not force and diff < self.tolerance:
-            _LOGGER.debug(
-                "Änderung zu klein (%.2f < %.2f), sende kein Update an Tado", 
-                diff, self.tolerance
-            )
+        # Wir senden nur, wenn force=True ODER die Differenz groß genug ist 
+        # ODER wenn wir gerade das Ziel erreicht haben und abschalten wollen.
+        if not force and not force_send_due_to_target_reached and diff < self.tolerance:
+            _LOGGER.debug("Änderung zu klein (%.2f < %.2f), kein Update nötig", diff, self.tolerance)
             return
 
         # 4. Der eigentliche Befehl an das Thermostat

@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/czepter/ha-tado-local-offset/issues",
   "requirements": [],
-  "version": "2026.2.2"
+  "version": "2026.2.3"
 }
