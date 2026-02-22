@@ -462,9 +462,17 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     _LOGGER.debug("Battery Saver: Wartezeit noch nicht abgelaufen")
                     return
 
-        # 2. Zielwert berechnen
-        # raw_target ist der exakte mathematische Wert (z.B. 21.234)
-        raw_target = self.data.desired_temp + self.data.offset
+        # 2. Zielwert berechnen (LOGIK-UPDATE)
+        # Wir prüfen: Ist es im Raum bereits so warm wie gewünscht?
+        if self.data.external_temp >= self.data.desired_temp:
+            # ZIEL ERREICHT: Wir senden nur noch den nackten Wunschwert.
+            # Da Tado intern (durch den Offset) die höhere Temp sieht, schaltet es ab.
+            raw_target = self.data.desired_temp
+            _LOGGER.debug("%s: Ziel erreicht (%.1f >= %.1f). Sende Basis-Sollwert.", 
+                         self.room_name, self.data.external_temp, self.data.desired_temp)
+        else:
+            # NOCH ZU KALT: Wir addieren den Offset, damit Tado weiter heizt.
+            raw_target = self.data.desired_temp + self.data.offset
         
         # WICHTIG: Tado/HomeKit akzeptiert meist nur 0,5°C Schritte.
         # Wir runden hier kaufmännisch auf die nächste 0,5er Stelle.
