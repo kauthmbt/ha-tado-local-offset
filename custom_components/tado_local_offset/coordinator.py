@@ -138,13 +138,24 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             # Hier darf KEIN 'raise UpdateFailed' stehen
 
         # Configuration
-        self.enable_temp_drop_detection = entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
+        #self.enable_temp_drop_detection = entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
+        #self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
+        #self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
+        #self.enable_preheat = entry.data.get(CONF_ENABLE_PREHEAT, False)
+        #self.learning_buffer = entry.data.get(CONF_LEARNING_BUFFER, 10)
+        #self.min_preheat_minutes = entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15)
+        #self.max_preheat_minutes = entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120)
+        
+        # Configuration - Prüfe erst Options (UI-Änderung), dann Data (Ersteinrichtung), dann Default
         self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
         self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
-        self.enable_preheat = entry.data.get(CONF_ENABLE_PREHEAT, False)
-        self.learning_buffer = entry.data.get(CONF_LEARNING_BUFFER, 10)
-        self.min_preheat_minutes = entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15)
-        self.max_preheat_minutes = entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120)
+        self.learning_buffer = entry.options.get(CONF_LEARNING_BUFFER, entry.data.get(CONF_LEARNING_BUFFER, 10))
+        self.min_preheat_minutes = entry.options.get(CONF_MIN_PREHEAT_MINUTES, entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15))
+        self.max_preheat_minutes = entry.options.get(CONF_MAX_PREHEAT_MINUTES, entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120))
+        
+        # Boolean Werte (Checkboxen)
+        self.enable_temp_drop_detection = entry.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False))
+        self.enable_preheat = entry.options.get(CONF_ENABLE_PREHEAT, entry.data.get(CONF_ENABLE_PREHEAT, False))
 
         # Internal state
         self._last_compensation_time: datetime | None = None
@@ -462,8 +473,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     _LOGGER.debug("Battery Saver: Wartezeit noch nicht abgelaufen")
                     return
 
-        # 2. Zielwert berechnen (LOGIK-UPDATE)
-        # Grund-Zielwert bestimmen
+        # 2. Zielwert berechnen mit "Harter Bremse"
         if self.data.external_temp >= self.data.desired_temp:
             # ZIEL ERREICHT: Wir senden exakt den Wunschwert ohne Offset-Zuschlag
             compensated_target = float(self.data.desired_temp)
@@ -587,7 +597,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # Filter für stabiles Lernen: 
         # Mind. 20 Min Laufzeit (0.33h) und 0.1°C Anstieg am EXTERNEN Sensor.
-        if duration_hrs < 0.33 or temp_diff < 0.1:
+        #if duration_hrs < 0.33 or temp_diff < 0.1:
+        #    return None
+        # Mind. 6 Min Laufzeit (0.1h) und 0.1°C Anstieg am EXTERNEN Sensor.
+        if duration_hrs < 0.1 or temp_diff < 0.1:
+            _LOGGER.debug("%s: Zyklus zu kurz oder Delta zu gering zum Lernen (%.2fh, %.2f°C)", 
+                         self.room_name, duration_hrs, temp_diff)
             return None
 
         # Die Rate ist nun Grad pro Stunde (°C/h)
