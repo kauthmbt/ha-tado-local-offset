@@ -3,83 +3,51 @@
     "step": {
       "user": {
         "title": "Basic Configuration",
-        "description": "Set up basic data for temperature compensation.",
         "data": {
           "room_name": "Room name",
           "tado_device": "Tado Thermostat (HomeKit)",
           "external_temp_sensor": "External temperature sensor"
-        },
-        "data_description": {
-          "room_name": "e.g., 'Living Room'",
-          "tado_device": "The Tado device integrated via HomeKit",
-          "external_temp_sensor": "The sensor providing the 'real' room temperature"
+        }
+      },
+      "sensors": {
+        "title": "Sensor Mapping",
+        "description": "Please verify the automatically discovered entities.",
+        "data": {
+          "tado_climate_entity": "Tado Climate Entity",
+          "tado_temp_sensor": "Tado Internal Sensor",
+          "tado_humidity_sensor": "Tado Humidity Sensor (optional)"
+        }
+      },
+      "window_detection": { "title": "Window Detection" },
+      "advanced_settings": { "title": "Advanced Settings" }
+    }
+  },
+  "options": {
+    "step": {
+      "general_settings": {
+        "title": "General Settings",
+        "data": {
+          "tolerance": "Temperature tolerance (°C)",
+          "backoff_minutes": "Backoff (minutes)",
+          "enable_battery_saver": "Battery saver mode"
         }
       },
       "window_detection": {
         "title": "Window Detection",
-        "description": "How should the system react to open windows?",
         "data": {
           "enable_window_detection": "Use window sensor",
-          "window_sensor": "Binary window sensor",
+          "window_sensor": "Binary window sensors",
           "enable_temp_drop_detection": "Enable drop detection",
           "temp_drop_threshold": "Drop threshold (°C)"
         }
       },
       "advanced_settings": {
-        "title": "Advanced Settings",
-        "description": "Fine-tuning for battery and pre-heating.",
+        "title": "Advanced & Preheat Settings",
         "data": {
-          "enable_battery_saver": "Battery saver mode",
-          "tolerance": "Temperature tolerance (°C)",
-          "backoff_minutes": "Backoff (minutes)",
           "enable_preheat": "Intelligent pre-heating",
-          "learning_buffer": "Time buffer (%)",
+          "learning_buffer": "Learning buffer (%)",
           "min_preheat_minutes": "Min. pre-heat time",
           "max_preheat_minutes": "Max. pre-heat time"
-        }
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Adjust Settings",
-        "data": {
-          "tolerance": "Temperature tolerance (°C)",
-          "backoff_minutes": "Backoff (minutes)",
-          "enable_battery_saver": "Battery saver mode",
-          "enable_window_detection": "Use window sensor",
-          "window_sensor": "Window sensor entity",
-          "enable_temp_drop_detection": "Drop detection",
-          "temp_drop_threshold": "Threshold (°C)",
-          "enable_preheat": "Enable pre-heating",
-          "learning_buffer": "Learning buffer (%)",
-          "min_preheat_minutes": "Min. pre-heat (min)",
-          "max_preheat_minutes": "Max. pre-heat (min)"
-        }
-      }
-    }
-  },
-  "services": {
-    "force_compensation": {
-      "name": "Force compensation",
-      "description": "Immediately send offset, bypassing backoff time."
-    },
-    "reset_learning": {
-      "name": "Reset learning",
-      "description": "Clear the learned average heating rate."
-    },
-    "set_preheat": {
-      "name": "Plan pre-heating",
-      "description": "Calculate start time based on target time.",
-      "fields": {
-        "target_time": {
-          "name": "Target time",
-          "description": "When should the temperature be reached?"
-        },
-        "target_temperature": {
-          "name": "Target temperature",
-          "description": "Desired warmth in degrees Celsius."
         }
       }
     }
