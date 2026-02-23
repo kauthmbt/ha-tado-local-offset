@@ -8,30 +8,52 @@
           "room_name": "Raumname",
           "tado_device": "Tado Thermostat (HomeKit)",
           "external_temp_sensor": "Externer Temperatursensor"
-        },
-        "data_description": {
-          "room_name": "Z.B. 'Wohnzimmer'",
-          "tado_device": "Das über HomeKit eingebundene Tado-Gerät",
-          "external_temp_sensor": "Der Sensor, der die 'echte' Raumtemperatur liefert"
+        }
+      },
+      "sensors": {
+        "title": "Sensor-Zuordnung",
+        "description": "Bitte überprüfe die automatisch erkannten Entitäten.",
+        "data": {
+          "tado_climate_entity": "Tado Klima-Entität",
+          "tado_temp_sensor": "Tado interner Sensor",
+          "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)"
         }
       },
       "window_detection": {
         "title": "Fenster-Erkennung",
-        "description": "Wie soll das System auf offene Fenster reagieren?",
+        "description": "Wie soll das System auf offene Fenster reagieren?"
+      },
+      "advanced_settings": {
+        "title": "Erweiterte Einstellungen",
+        "description": "Feintuning für Batterie und Vorheizen."
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "general_settings": {
+        "title": "Allgemeine Einstellungen",
+        "description": "Grundparameter der Kompensation.",
+        "data": {
+          "tolerance": "Temperatur-Toleranz (°C)",
+          "backoff_minutes": "Wartezeit (Minuten)",
+          "enable_battery_saver": "Batteriesparmodus"
+        }
+      },
+      "window_detection": {
+        "title": "Fenster-Erkennung",
+        "description": "Konfiguration der Abschaltung bei offenem Fenster.",
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl möglich)",
+          "window_sensor": "Fenster-/Türsensoren",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Temperaturabfall-Limit (°C)"
         }
       },
       "advanced_settings": {
-        "title": "Erweiterte Einstellungen",
-        "description": "Feintuning für Batterie und Vorheizen.",
+        "title": "Erweiterte Einstellungen & Vorheizen",
+        "description": "Lernfunktion und Puffer-Zeiten.",
         "data": {
-          "enable_battery_saver": "Batteriesparmodus",
-          "tolerance": "Toleranz (°C)",
-          "backoff_minutes": "Wartezeit (Minuten)",
           "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit",
@@ -40,48 +62,8 @@
       }
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Einstellungen anpassen",
-        "data": {
-          "tolerance": "Temperatur-Toleranz (°C)",
-          "backoff_minutes": "Wartezeit (Minuten)",
-          "enable_battery_saver": "Batteriesparmodus",
-          "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Fenster-Sensor Entität",
-          "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
-          "temp_drop_threshold": "Schwellenwert (°C)",
-          "enable_preheat": "Vorheizen aktivieren",
-          "learning_buffer": "Lern-Puffer (%)",
-          "min_preheat_minutes": "Min. Vorheizzeit (Min)",
-          "max_preheat_minutes": "Max. Vorheizzeit (Min)"
-        }
-      }
-    }
-  },
   "services": {
-    "force_compensation": {
-      "name": "Korrektur erzwingen",
-      "description": "Offset sofort ohne Wartezeit senden."
-    },
-    "reset_learning": {
-      "name": "Lernen zurücksetzen",
-      "description": "Gelernten Durchschnitt löschen."
-    },
-    "set_preheat": {
-      "name": "Vorheizen planen",
-      "description": "Startzeitpunkt basierend auf Zielzeit berechnen.",
-      "fields": {
-        "target_time": {
-          "name": "Ziel-Zeit",
-          "description": "Wann soll die Temperatur erreicht sein?"
-        },
-        "target_temperature": {
-          "name": "Ziel-Temperatur",
-          "description": "Gewünschte Wärme in Grad Celsius."
-        }
-      }
-    }
+    "force_compensation": { "name": "Korrektur erzwingen", "description": "Offset sofort ohne Wartezeit senden." },
+    "reset_learning": { "name": "Lernen zurücksetzen", "description": "Gelernten Durchschnitt löschen." }
   }
 }
