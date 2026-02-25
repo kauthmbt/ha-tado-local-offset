@@ -588,17 +588,28 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if self._heating_start_time is None or self._heating_start_temp is None:
             return None
 
+        # --- NEU: Sperrzeit nach Fenster-Schließen (Beruhigungsphase) ---
         now = dt_util.utcnow()
+        if self.window_sensor:
+            for sensor_id in self.window_sensor:
+                state = self.hass.states.get(sensor_id)
+                if state and state.state == "off":
+                    # Prüfen, wie lange das Fenster schon zu ist
+                    time_since_close = (now - state.last_changed).total_seconds() / 60
+                    if time_since_close < 15:
+                        _LOGGER.debug(
+                            "%s: Lernen pausiert (Fenster erst vor %.0f Min. geschlossen)", 
+                            self.room_name, time_since_close
+                        )
+                        return None
+        # --- Ende der neuen Logik ---
         duration_hrs = (now - self._heating_start_time).total_seconds() / 3600
         
         # WICHTIG: temp_diff basiert hier auf dem externen Sensorwert, 
         # der beim Heizstart in self._heating_start_temp eingefroren wurde.
         temp_diff = current_external_temp - self._heating_start_temp
 
-        # Filter für stabiles Lernen: 
-        # Mind. 20 Min Laufzeit (0.33h) und 0.1°C Anstieg am EXTERNEN Sensor.
-        #if duration_hrs < 0.33 or temp_diff < 0.1:
-        #    return None
+        
         # Mind. 6 Min Laufzeit (0.1h) und 0.1°C Anstieg am EXTERNEN Sensor.
         if duration_hrs < 0.1 or temp_diff < 0.1:
             _LOGGER.debug("%s: Zyklus zu kurz oder Delta zu gering zum Lernen (%.2fh, %.2f°C)", 
