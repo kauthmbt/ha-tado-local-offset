@@ -2,54 +2,30 @@
   "config": {
     "step": {
       "user": {
-        "title": "Basic Configuration",
+        "title": "1. Basic Configuration",
         "data": {
-          "room_name": "Room name",
-          "tado_device": "Tado Thermostat (HomeKit)",
-          "external_temp_sensor": "External temperature sensor"
+          "room_name": "Room Name",
+          "tado_device": "Tado Device",
+          "external_temp_sensor": "External Temp Sensor"
         }
       },
       "sensors": {
-        "title": "Sensor Mapping",
-        "description": "Please verify the automatically discovered entities.",
+        "title": "2. Sensor Mapping",
         "data": {
-          "tado_climate_entity": "Tado Climate Entity",
-          "tado_temp_sensor": "Tado Internal Sensor",
-          "tado_humidity_sensor": "Tado Humidity Sensor (optional)"
+          "tado_climate_entity": "Climate Entity",
+          "tado_temp_sensor": "Internal Sensor",
+          "tado_humidity_sensor": "Humidity Sensor"
         }
       },
-      "window_detection": { "title": "Window Detection" },
-      "advanced_settings": { "title": "Advanced Settings" }
+      "window_detection": { "title": "3. Window Detection" },
+      "advanced_settings": { "title": "4. Advanced Settings" }
     }
   },
   "options": {
     "step": {
-      "general_settings": {
-        "title": "General Settings",
-        "data": {
-          "tolerance": "Temperature tolerance (°C)",
-          "backoff_minutes": "Backoff (minutes)",
-          "enable_battery_saver": "Battery saver mode"
-        }
-      },
-      "window_detection": {
-        "title": "Window Detection",
-        "data": {
-          "enable_window_detection": "Use window sensor",
-          "window_sensor": "Binary window sensors",
-          "enable_temp_drop_detection": "Enable drop detection",
-          "temp_drop_threshold": "Drop threshold (°C)"
-        }
-      },
-      "advanced_settings": {
-        "title": "Advanced & Preheat Settings",
-        "data": {
-          "enable_preheat": "Intelligent pre-heating",
-          "learning_buffer": "Learning buffer (%)",
-          "min_preheat_minutes": "Min. pre-heat time",
-          "max_preheat_minutes": "Max. pre-heat time"
-        }
-      }
+      "general_settings": { "title": "General Settings" },
+      "window_detection": { "title": "Window Detection" },
+      "advanced_settings": { "title": "Advanced & Preheat" }
     }
   }
 }
