@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "Basis-Konfiguration",
-        "description": "Grunddaten für die Temperaturkompensation festlegen.",
+        "title": "1. Basis-Konfiguration",
+        "description": "Grunddaten für den Raum festlegen.",
         "data": {
           "room_name": "Raumname",
           "tado_device": "Tado Thermostat (HomeKit)",
@@ -11,8 +11,8 @@
         }
       },
       "sensors": {
-        "title": "Sensor-Zuordnung",
-        "description": "Bitte überprüfe die automatisch erkannten Entitäten.",
+        "title": "2. Sensor-Zuordnung",
+        "description": "Überprüfe die erkannten Tado-Entitäten.",
         "data": {
           "tado_climate_entity": "Tado Klima-Entität",
           "tado_temp_sensor": "Tado interner Sensor",
@@ -20,12 +20,12 @@
         }
       },
       "window_detection": {
-        "title": "Fenster-Erkennung",
-        "description": "Wie soll das System auf offene Fenster reagieren?"
+        "title": "3. Fenster-Erkennung",
+        "description": "Reaktion auf offene Fenster und Temperaturabfall."
       },
       "advanced_settings": {
-        "title": "Erweiterte Einstellungen",
-        "description": "Feintuning für Batterie und Vorheizen."
+        "title": "4. Erweiterte Einstellungen",
+        "description": "Feintuning für Toleranz, Batterie und Vorheizen."
       }
     }
   },
@@ -33,7 +33,6 @@
     "step": {
       "general_settings": {
         "title": "Allgemeine Einstellungen",
-        "description": "Grundparameter der Kompensation.",
         "data": {
           "tolerance": "Temperatur-Toleranz (°C)",
           "backoff_minutes": "Wartezeit (Minuten)",
@@ -42,28 +41,22 @@
       },
       "window_detection": {
         "title": "Fenster-Erkennung",
-        "description": "Konfiguration der Abschaltung bei offenem Fenster.",
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Fenster-/Türsensoren",
+          "window_sensor": "Fenster-/Türsensoren (Mehrfach)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
-          "temp_drop_threshold": "Temperaturabfall-Limit (°C)"
+          "temp_drop_threshold": "Abfall-Limit (°C)"
         }
       },
       "advanced_settings": {
         "title": "Erweiterte Einstellungen & Vorheizen",
-        "description": "Lernfunktion und Puffer-Zeiten.",
         "data": {
-          "enable_preheat": "Vorheizen (Lernfunktion)",
+          "enable_preheat": "Intelligentes Vorheizen",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit",
           "max_preheat_minutes": "Max. Vorheizzeit"
         }
       }
     }
-  },
-  "services": {
-    "force_compensation": { "name": "Korrektur erzwingen", "description": "Offset sofort ohne Wartezeit senden." },
-    "reset_learning": { "name": "Lernen zurücksetzen", "description": "Gelernten Durchschnitt löschen." }
   }
 }
