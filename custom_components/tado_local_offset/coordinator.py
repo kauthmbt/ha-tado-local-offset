@@ -15,7 +15,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-# persistente Speicherung des Lernens
 from homeassistant.helpers.storage import Store
 # ------------------------------------
 from homeassistant.util import dt as dt_util
@@ -55,11 +54,10 @@ from .const import (
     UPDATE_INTERVAL,
 )
 
-# Neue Konstanten für den Speicher
 STORAGE_KEY = f"{DOMAIN}_storage"
 STORAGE_VERSION = 1
 
-_LOGGER = logging.getLogger(__name__) # Falls er hier schon steht, einfach lassen
+_LOGGER = logging.getLogger(__name__) 
 # ---------------------
 @dataclass
 #class HeatingCycle:
@@ -92,7 +90,7 @@ class TadoLocalOffsetData:
     battery_saver_enabled: bool = True
     window_override: bool = False
     
-    # Dies ist eine spezielle Markierung für Python 3.13
+    # This is a special marker for Python 3.13.
     _: KW_ONLY 
     
     last_update: datetime = field(default_factory=dt_util.utcnow)
@@ -105,11 +103,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def __init__(self, hass: HomeAssistant, entry: dict[str, Any]) -> None:
         """Initialize the coordinator."""
-        # 1. Zuerst den Speicher initialisieren!
-        # STORAGE_VERSION und STORAGE_KEY müssen oben in der Datei definiert sein
         self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
 
-        # 2. Dann den super().__init__ aufrufen
         super().__init__(
             hass,
             _LOGGER,
@@ -120,7 +115,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.entry = entry
         self.room_name = entry.data[CONF_ROOM_NAME]
 
-        # Entity IDs - Sicherer Zugriff auf Data ODER Options
         def get_conf(key, default=None):
             return entry.options.get(key, entry.data.get(key, default))
             
@@ -129,31 +123,21 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.tado_humidity_sensor = get_conf(CONF_TADO_HUMIDITY_SENSOR)
         self.external_temp_sensor = get_conf(CONF_EXTERNAL_TEMP_SENSOR)
 
-        # Sicherheits-Check: Wenn Pflicht-Sensoren fehlen, Setup abbrechen
         if not self.tado_climate_entity or not self.external_temp_sensor:
             _LOGGER.warning(
-                "Konfiguration für Raum '%s' unvollständig oder Sensoren noch nicht bereit. Setup wird fortgesetzt.", 
+                "Configuration for room ‘%s’ incomplete or sensors not yet ready. Setup will continue.", 
                 self.room_name
             )
-            # Hier darf KEIN 'raise UpdateFailed' stehen
 
-        # Configuration
-        #self.enable_temp_drop_detection = entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
-        #self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
-        #self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
-        #self.enable_preheat = entry.data.get(CONF_ENABLE_PREHEAT, False)
-        #self.learning_buffer = entry.data.get(CONF_LEARNING_BUFFER, 10)
-        #self.min_preheat_minutes = entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15)
-        #self.max_preheat_minutes = entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120)
         
-        # Configuration - Prüfe erst Options (UI-Änderung), dann Data (Ersteinrichtung), dann Default
+        # Configuration - First check Options (UI change), then Data (initial setup), then Default
         self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
         self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
         self.learning_buffer = entry.options.get(CONF_LEARNING_BUFFER, entry.data.get(CONF_LEARNING_BUFFER, 10))
         self.min_preheat_minutes = entry.options.get(CONF_MIN_PREHEAT_MINUTES, entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15))
         self.max_preheat_minutes = entry.options.get(CONF_MAX_PREHEAT_MINUTES, entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120))
         
-        # Boolean Werte (Checkboxen)
+        # Boolean Values 
         self.enable_temp_drop_detection = entry.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False))
         self.enable_preheat = entry.options.get(CONF_ENABLE_PREHEAT, entry.data.get(CONF_ENABLE_PREHEAT, False))
 
@@ -162,9 +146,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._last_sent_compensated_target: float | None = None
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
-        self._heating_external_start_temp: float | None = None # NEU
+        self._heating_external_start_temp: float | None = None 
         self._temp_history: list[tuple[datetime, float]] = []
-        self._is_heating = False # NEU: Damit wir wissen, ob wir gerade heizen
+        self._is_heating = False 
 
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
@@ -172,30 +156,25 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Initialize data
         self.data = TadoLocalOffsetData()
 
-        # --- Fenster-Sensor Initialisierung (verbessert) ---
+        # --- Window-Sensor ---
         conf_window = entry.options.get(
             CONF_WINDOW_SENSOR, 
             entry.data.get(CONF_WINDOW_SENSOR, [])
         )
         
-        # Falls None zurückkommt (bei leerer Auswahl), setze eine leere Liste
         if conf_window is None:
             self.window_sensor = []
         elif isinstance(conf_window, str):
-            # Falls nur ein einzelner String kommt, packe ihn in eine Liste
             self.window_sensor = [conf_window]
         else:
             self.window_sensor = conf_window
         
-        # Sicherheits-Check: Falls noch ein alter einzelner String gespeichert ist, 
-        # wandle ihn in eine Liste um.
         if isinstance(self.window_sensor, str):
             if self.window_sensor == "":
                 self.window_sensor = []
             else:
                 self.window_sensor = [self.window_sensor]
-        
-        # Sicherstellen, dass die Flags korrekt gesetzt sind
+
         self.enable_window_detection = entry.options.get(
             CONF_ENABLE_WINDOW_DETECTION,
             entry.data.get(CONF_ENABLE_WINDOW_DETECTION, False)
@@ -208,10 +187,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     async def _async_update_data(self) -> TadoLocalOffsetData:
         """Fetch data from sensors and calculate compensation."""
         try:
-            # --- NEU: Sicherheitsprüfung der IDs, bevor hass.states.get aufgerufen wird ---
             if not self.external_temp_sensor or not self.tado_temp_sensor or not self.tado_climate_entity:
-                _LOGGER.debug("Sensoren für %s noch nicht vollständig initialisiert", self.room_name)
-                # Wir geben die aktuellen Daten einfach zurück, ohne abzubrechen
+                _LOGGER.debug("Sensors for %s not yet fully initialized", self.room_name)
                 return self.data
                 
             # Get current sensor states
@@ -220,19 +197,16 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             tado_climate_state = self.hass.states.get(self.tado_climate_entity)
 
             # Validate states
-            # 1. Prüfen, ob die Entitäten in HA überhaupt registriert sind
             if not external_temp_state or not tado_temp_state or not tado_climate_state:
-                _LOGGER.warning("Setup-Warten: Sensoren in HA noch nicht gefunden (Extern: %s, Tado: %s)", 
+                _LOGGER.warning("Setup pending: Sensors not yet found in HA (External: %s, Tado: %s)", 
                                 self.external_temp_sensor, self.tado_temp_sensor)
                 return self.data
 
-            # 2. Prüfen, ob die Werte der Entitäten gültig sind (nicht unknown/unavailable)
-            # Wir nutzen hier nur return, niemals 'raise', damit das Setup nicht abbricht.
             if (tado_temp_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN) or 
                 external_temp_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN) or
                 tado_climate_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN)):
                 
-                _LOGGER.debug("Einer der Sensoren liefert noch keine Werte (Status: unknown/unavailable)")
+                _LOGGER.debug("One of the sensors is not yet providing any values (status: unknown/unavailable).")
                 return self.data
 
             # Parse temperatures
@@ -240,67 +214,49 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 external_temp = float(external_temp_state.state)
                 tado_temp = float(tado_temp_state.state)
                 
-                # Plausibilitäts-Filter: HomeKit liefert oft 0.0 beim Start.
-                # Wir loggen den Erhalt der Werte zur Diagnose.
                 if tado_temp < 5.0 or external_temp < 5.0:
-                    _LOGGER.warning("Unplausible Werte für %s erhalten (Tado: %.1f, Extern: %.1f)", 
+                    _LOGGER.warning("Received implausible values for %s (Tado: %.1f, External: %.1f)", 
                                     self.room_name, tado_temp, external_temp)
                     return self.data
 
-                # WICHTIG: Zuweisung muss VOR den Berechnungen (Offset/Learning) erfolgen
                 self.data.external_temp = external_temp
                 self.data.tado_temp = tado_temp
-                _LOGGER.info("Temperaturen für %s aktualisiert: %.1f (Extern: %.1f)", 
+                _LOGGER.info("Temperatures updated for %s: %.1f (External: %.1f)", 
                              self.room_name, tado_temp, external_temp)
                     
             except (ValueError, TypeError) as err:
-                _LOGGER.error("Fehler beim Parsen der Temperatur für %s: %s", self.room_name, err)
+                _LOGGER.error("Error parsing temperature for %s: %s", self.room_name, err)
                 return self.data
 
             # Update data
             self.data.external_temp = external_temp
             self.data.tado_temp = tado_temp
             self.data.tado_target = float(tado_climate_state.attributes.get("temperature", DEFAULT_DESIRED_TEMP))
-            # HVAC-Mode Normalisierung (Wichtig für HomeKit)
-            # Wir lesen den State (z.B. 'heat', 'idle', 'unknown')
             raw_state = str(tado_climate_state.state).lower()
             
             if raw_state == "off":
                 self.data.hvac_mode = "off"
             else:
-                # HomeKit meldet oft 'idle' als State, wenn nicht geheizt wird.
-                # In HA muss der HVAC_MODE aber 'heat' bleiben, damit der Regler
-                # aktiv bleibt. 'idle' gehört in die 'hvac_action'.
                 self.data.hvac_mode = "heat"
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
-            # --- NEU: Live-Learning für 5-Minuten-Sensoren ---
+            # --- NEW: Live-Learning ---
             current_hvac = self.data.hvac_action
             if current_hvac == "heating":
                 if self._heating_start_time is None:
-                    # Zyklus-Start: Zeit und EXTERNE Temp festhalten
                     self._heating_start_time = dt_util.utcnow()
-                    # WICHTIG: Wir speichern die externe Temperatur als Startpunkt, 
-                    # da diese sich nicht durch Offset-Sprünge ändert.
                     self._heating_start_temp = self.data.external_temp 
-                    _LOGGER.info("Heizzyklus-Lernen gestartet bei %.2f°C (Extern)", self.data.external_temp)
+                    _LOGGER.info("Heating cycle learning started at %.2f°C (External)", self.data.external_temp)
                 else:
-                    # Live-Berechnung während der Heizphase
-                    # Wir übergeben die aktuelle externe Temperatur an die Berechnung
-                    instant_rate = self._calculate_instant_heating_rate(self.data.external_temp)
-                    
-                    if instant_rate is not None:
-                        # Glättung über den Learning-Buffer
-                        alpha = self.learning_buffer / 100
-                        # Berechnung erfolgt in °C pro Stunde
-                        self.data.heating_rate = round((self.data.heating_rate * (1 - alpha)) + (instant_rate * alpha), 4)
+                    # We only call the function. 
+                    # It takes care of the list, the average, and saving internally.
+                    self._calculate_instant_heating_rate(self.data.external_temp)
             else:
-                # Heizung aus oder idle: Startwerte zurücksetzen
                 if self._heating_start_time is not None:
-                     _LOGGER.info("Heizzyklus-Lernen beendet.")
+                    _LOGGER.info("Heating cycle completed. Data has been processed.")
                 self._heating_start_time = None
                 self._heating_start_temp = None
-            # --- ENDE NEU ---
+            # --- END NEW ---
             # Calculate offset
             self.data.offset = external_temp - tado_temp
 
@@ -337,26 +293,25 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Erkennt Änderungen am Tado-Thermostat (App, Zeitplan, Drehrad)."""
         tado_target = self.data.tado_target
 
-        # Abkühlzeit nach eigener Änderung prüfen
+        # Check cooling time after making your own changes
         if self._last_compensation_time:
             elapsed = (dt_util.utcnow() - self._last_compensation_time).total_seconds()
             if elapsed < self._external_change_cooldown:
                 return False
 
-        # Initialer Abgleich beim Start
+        # Initial synchronization at startup
         if self._last_sent_compensated_target is None:
             if abs(self.data.desired_temp - tado_target) > 0.1:
-                # Wir ziehen den aktuellen Offset ab, um den echten Wunschwert zu finden
                 self.data.desired_temp = round(tado_target - self.data.offset, 1)
             return False
 
-        # Erkennung einer externen Änderung (Schwellenwert 0.4°C)
+        # Detection of an external change (threshold value 0.4°C)
         if abs(tado_target - self._last_sent_compensated_target) > 0.4:
-            # WICHTIG: Den Offset abziehen, um das wahre neue Soll zu erhalten
+            # IMPORTANT: Subtract the offset to obtain the true new target value.
             new_desired = round(tado_target - self.data.offset, 1)
             
             _LOGGER.info(
-                "Externe Änderung für %s: Tado Ziel=%.1f°C -> Neues Soll: %.1f°C",
+                "External change for %s: Tado target=%.1f°C -> New target: %.1f°C",
                 self.room_name, tado_target, new_desired
             )
             
@@ -380,9 +335,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def _check_window_open(self) -> bool:
         """Check if any window is open via sensors or temperature drop."""
-        # 1. Physikalische Sensoren prüfen
+        # 1. Check physical sensors
         if self.enable_window_detection and self.window_sensor:
-            # Wir stellen sicher, dass wir immer eine Liste haben
+            # We ensure that we always have a list
             sensors = self.window_sensor
             if isinstance(sensors, str):
                 sensors = [sensors]
@@ -390,14 +345,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             for sensor_id in sensors:
                 window_state = self.hass.states.get(sensor_id)
                 if window_state and window_state.state == STATE_ON:
-                    _LOGGER.debug("Fenster offen erkannt durch Sensor: %s", sensor_id)
+                    _LOGGER.debug("Window open detected by sensor: %s", sensor_id)
                     return True
 
-        # 2. Temperatursturz-Erkennung prüfen
+        # 2. Temperature drop detection
         if self.enable_temp_drop_detection:
             # Wenn der Sturz erkannt wurde, geben wir True zurück
             if self._detect_temperature_drop():
-                _LOGGER.debug("Fenster offen erkannt durch Temperatursturz")
+                _LOGGER.debug("Window open detected by drop in temperature")
                 return True
 
         return False
@@ -456,53 +411,43 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Berechnet die Temperaturkorrektur und sendet sie gerundet an Tado."""
         now = dt_util.utcnow()
 
-        # 1. Vorab-Prüfung: Sollte überhaupt etwas gesendet werden?
+        # 1. Preliminary check: Should anything be sent at all?
         if not force:
-            # Kompensation generell deaktiviert?
             if not self.data.compensation_enabled:
                 return
-            
-            # Fenster offen? (Prüft alle Sensoren aus deiner neuen Liste)
+
             if self.data.window_open and not self.data.window_override:
-                _LOGGER.debug("Kompensation übersprungen: Fenster/Tür ist offen")
+                _LOGGER.debug("Compensation skipped: Window/door is open")
                 return
 
-            # Battery Saver: Backoff-Zeit (Wartezeit) prüfen
             if self.data.battery_saver_enabled and self._last_compensation_time:
                 if now < self._last_compensation_time + timedelta(minutes=self.backoff_minutes):
-                    _LOGGER.debug("Battery Saver: Wartezeit noch nicht abgelaufen")
+                    _LOGGER.debug("Battery Saver: Waiting period not yet expired")
                     return
 
-        # 2. Zielwert berechnen mit "Harter Bremse"
+        # 2. Calculate target value with “hard braking”
         if self.data.external_temp >= self.data.desired_temp:
-            # ZIEL ERREICHT: Wir senden exakt den Wunschwert ohne Offset-Zuschlag
             compensated_target = float(self.data.desired_temp)
-            _LOGGER.debug("%s: Ziel erreicht (%.1f >= %.1f). Fixiere auf %.1f", 
+            _LOGGER.debug("%s: Target reached (%.1f >= %.1f). Fix at %.1f", 
                          self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target)
             
-            # WICHTIG: Wenn das Ziel erreicht ist, erzwingen wir das Update,
-            # indem wir die Toleranzprüfung überspringen (force_send = True)
             force_send_due_to_target_reached = True
         else:
-            # NOCH ZU KALT: Normaler Heiz-Boost mit 0,5er Rundung
             raw_target = self.data.desired_temp + self.data.offset
             compensated_target = round(raw_target * 2) / 2
             force_send_due_to_target_reached = False
 
-        # Sicherheitsgrenzen einhalten
         compensated_target = max(5.0, min(25.0, compensated_target))
 
-        # 2. Toleranzprüfung
+        # 2. Tolerance check
         current_tado_target = self.data.tado_target
         diff = abs(compensated_target - current_tado_target)
-        
-        # Wir senden nur, wenn force=True ODER die Differenz groß genug ist 
-        # ODER wenn wir gerade das Ziel erreicht haben und abschalten wollen.
+
         if not force and not force_send_due_to_target_reached and diff < self.tolerance:
-            _LOGGER.debug("Änderung zu klein (%.2f < %.2f), kein Update nötig", diff, self.tolerance)
+            _LOGGER.debug("Change too small (%.2f < %.2f), no update necessary", diff, self.tolerance)
             return
 
-        # 4. Der eigentliche Befehl an das Thermostat
+        # 4. The actual command to the thermostat
         try:
             await self.hass.services.async_call(
                 "climate",
@@ -511,13 +456,13 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     "entity_id": self.tado_climate_entity,
                     "temperature": compensated_target,
                 },
-                blocking=False, # GEÄNDERT auf False
+                blocking=False, # CHANGED to False
             )
             self._last_sent_compensated_target = compensated_target
             self._last_compensation_time = now
             self.data.compensated_target = compensated_target
         except Exception as err:
-            _LOGGER.error("Fehler beim Senden an Tado (%s): %s", self.room_name, err)
+            _LOGGER.error("Error sending to Tado (%s): %s", self.room_name, err)
             
     def _should_compensate(self) -> bool:
         """Determine if compensation should be applied."""
@@ -588,41 +533,45 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if self._heating_start_time is None or self._heating_start_temp is None:
             return None
 
+        # --- NEW: Lockout period after window closure (calming phase)  ---
         now = dt_util.utcnow()
+        if self.window_sensor:
+            for sensor_id in self.window_sensor:
+                state = self.hass.states.get(sensor_id)
+                if state and state.state == "off":
+                    # Check how long the window has been closed
+                    time_since_close = (now - state.last_changed).total_seconds() / 60
+                    if time_since_close < 15:
+                        _LOGGER.debug(
+                            "%s: Learning paused (window closed less than %.0f min ago)", 
+                            self.room_name, time_since_close
+                        )
+                        return None
+        # --- End of new logic ---
         duration_hrs = (now - self._heating_start_time).total_seconds() / 3600
         
-        # WICHTIG: temp_diff basiert hier auf dem externen Sensorwert, 
-        # der beim Heizstart in self._heating_start_temp eingefroren wurde.
+        # IMPORTANT: temp_diff is based on the external sensor value here. 
         temp_diff = current_external_temp - self._heating_start_temp
 
-        # Filter für stabiles Lernen: 
-        # Mind. 20 Min Laufzeit (0.33h) und 0.1°C Anstieg am EXTERNEN Sensor.
-        #if duration_hrs < 0.33 or temp_diff < 0.1:
-        #    return None
-        # Mind. 6 Min Laufzeit (0.1h) und 0.1°C Anstieg am EXTERNEN Sensor.
+        # Filter for stable learning: 
+        # Min. 6 min runtime (0.1h) and 0.1°C increase at the EXTERNAL sensor.
         if duration_hrs < 0.1 or temp_diff < 0.1:
-            _LOGGER.debug("%s: Zyklus zu kurz oder Delta zu gering zum Lernen (%.2fh, %.2f°C)", 
+            _LOGGER.debug("%s: Cycle too short or delta too small for learning (%.2fh, %.2f°C)", 
                          self.room_name, duration_hrs, temp_diff)
             return None
 
-        # Die Rate ist nun Grad pro Stunde (°C/h)
         instant_rate = temp_diff / duration_hrs
         
-        # 1. Den neuen Wert zur Historie hinzufügen
         self.data.heating_history.append(instant_rate)
         
-        # 2. Die Liste auf die maximale Anzahl begrenzen (aus const.py)
         from .const import MAX_HEATING_CYCLES, MIN_HEATING_RATE, MAX_HEATING_RATE
         if len(self.data.heating_history) > MAX_HEATING_CYCLES:
             self.data.heating_history.pop(0)
 
-        # 3. Den neuen Durchschnitt berechnen
         self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
 
-        # 4. Persistent speichern (JSON)
         self.hass.async_create_task(self._async_save_data())
 
-        # 5. Validierung gegen Grenzwerte
         if MIN_HEATING_RATE <= instant_rate <= MAX_HEATING_RATE:
             return instant_rate
             
@@ -633,7 +582,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         stored_data = await self._store.async_load()
         if stored_data and "history" in stored_data:
             self.data.heating_history = stored_data["history"]
-            _LOGGER.info("Historische Heizdaten für %s geladen", self.room_name)
+            # --- NEW: Calculate the average immediately upon loading ---
+            if self.data.heating_history:
+                self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
+                
+            _LOGGER.info(
+                "Historical heating data for %s loaded. Current rate: %.4f °C/h", 
+                self.room_name, self.data.heating_rate
+            )
+
 
     async def _async_save_data(self) -> None:
         """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
