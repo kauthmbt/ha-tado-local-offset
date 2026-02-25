@@ -582,7 +582,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         stored_data = await self._store.async_load()
         if stored_data and "history" in stored_data:
             self.data.heating_history = stored_data["history"]
-            _LOGGER.info("Historische Heizdaten für %s geladen", self.room_name)
+            # --- NEW: Calculate the average immediately upon loading ---
+            if self.data.heating_history:
+                self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
+                
+            _LOGGER.info(
+                "Historical heating data for %s loaded. Current rate: %.4f °C/h", 
+                self.room_name, self.data.heating_rate
+            )
+
 
     async def _async_save_data(self) -> None:
         """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
