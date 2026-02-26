@@ -337,16 +337,26 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Check if any window is open via sensors or temperature drop."""
         # 1. Check physical sensors
         if self.enable_window_detection and self.window_sensor:
-            # We ensure that we always have a list
             sensors = self.window_sensor
             if isinstance(sensors, str):
                 sensors = [sensors]
+            
+            from .const import WINDOW_OPEN_DELAY_SECONDS
+            now = dt_util.utcnow()
 
             for sensor_id in sensors:
                 window_state = self.hass.states.get(sensor_id)
                 if window_state and window_state.state == STATE_ON:
-                    _LOGGER.debug("Window open detected by sensor: %s", sensor_id)
-                    return True
+                    # Calculate how long the window has been open
+                    open_duration = (now - window_state.last_changed).total_seconds()
+                    
+                    if open_duration >= WINDOW_OPEN_DELAY_SECONDS:
+                        _LOGGER.debug("[%s] Window open detected (duration: %.0fs): %s", 
+                                     self.room_name, open_duration, sensor_id)
+                        return True
+                    else:
+                        _LOGGER.debug("[%s] Window open but waiting for delay (%.0fs/%.0fs)", 
+                                     self.room_name, open_duration, WINDOW_OPEN_DELAY_SECONDS)
 
         # 2. Temperature drop detection
         if self.enable_temp_drop_detection:
