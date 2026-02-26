@@ -198,8 +198,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
             # Validate states
             if not external_temp_state or not tado_temp_state or not tado_climate_state:
-                _LOGGER.warning("Setup pending: Sensors not yet found in HA (External: %s, Tado: %s)", 
-                                self.external_temp_sensor, self.tado_temp_sensor)
+                _LOGGER.warning("[%s] Setup pending: Sensors not yet found in HA (External: %s, Tado: %s)", 
+                                self.room_name, self.external_temp_sensor, self.tado_temp_sensor)
                 return self.data
 
             if (tado_temp_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN) or 
@@ -221,7 +221,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
                 self.data.external_temp = external_temp
                 self.data.tado_temp = tado_temp
-                _LOGGER.info("Temperatures updated for %s: %.1f (External: %.1f)", 
+                _LOGGER.info("[%s] Temperatures updated for Tado %s (Extern %s)", 
                              self.room_name, tado_temp, external_temp)
                     
             except (ValueError, TypeError) as err:
@@ -253,7 +253,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     self._calculate_instant_heating_rate(self.data.external_temp)
             else:
                 if self._heating_start_time is not None:
-                    _LOGGER.info("Heating cycle completed. Data has been processed.")
+                    _LOGGER.info("[%s] Heating cycle completed. Data has been processed.", self.room_name)
                 self._heating_start_time = None
                 self._heating_start_temp = None
             # --- END NEW ---
@@ -503,7 +503,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Force compensation, bypassing all checks except window."""
         # Still respect window detection unless overridden
         if self.data.window_open and not self.data.window_override:
-            self.logger.warning("Cannot force compensation: window is open")
+            self.logger.info("[%s] Cannot force compensation: window is open", self.room_name)
             return
 
         await self.async_calculate_and_apply_compensation(force=True)
