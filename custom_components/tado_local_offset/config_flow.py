@@ -146,6 +146,11 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(CONF_WINDOW_SENSOR, default=self.options.get(CONF_WINDOW_SENSOR, [])): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="binary_sensor", device_class=["window", "door"], multiple=True)
                 ),
+                # UI Option
+                vol.Optional(
+                    CONF_WINDOW_OPEN_DELAY, 
+                    default=self.options.get(CONF_WINDOW_OPEN_DELAY, DEFAULT_WINDOW_OPEN_DELAY)
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=600)),
                 vol.Optional(CONF_ENABLE_TEMP_DROP_DETECTION, default=self.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)): bool,
                 vol.Optional(CONF_TEMP_DROP_THRESHOLD, default=self.options.get(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD)): vol.All(
                     vol.Coerce(float), vol.Range(min=0.5, max=3.0)
