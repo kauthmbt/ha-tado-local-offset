@@ -58,7 +58,8 @@ TEMP_DROP_WINDOW_MINUTES: Final = 5
 TEMP_DROP_RATE_THRESHOLD: Final = 0.15  # °C per minute
 
 # Window detection delays
-WINDOW_CLOSE_DELAY_SECONDS: Final = 120  # 2 minutes
+WINDOW_OPEN_DELAY_SECONDS: Final = 120
+WINDOW_CLOSE_DELAY_SECONDS: Final = 120
 
 # Attribute names
 ATTR_OFFSET: Final = "temperature_offset"
