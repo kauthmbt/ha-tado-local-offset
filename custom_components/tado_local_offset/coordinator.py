@@ -193,6 +193,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 _LOGGER.debug("Sensors for %s not yet fully initialized", self.room_name)
                 return self.data
                 
+            # --- NEW: Remember current window state ---
+            old_window_state = self.data.window_open
             # Get current sensor states
             external_temp_state = self.hass.states.get(self.external_temp_sensor)
             tado_temp_state = self.hass.states.get(self.tado_temp_sensor)
@@ -270,7 +272,27 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             self._update_temp_history(external_temp)
 
             # Check window status
+            #self.data.window_open = self._check_window_open()
+            # --- WINDOW LOGIC START ---
+            old_window_state = self.data.window_open
             self.data.window_open = self._check_window_open()
+
+            # ACTION 1: Window just OPENED -> Set Tado to 5.0°C (Frost Protection)
+            if self.data.window_open and not old_window_state:
+                _LOGGER.info("[%s] Fenster-Puffer abgelaufen. Setze Tado auf 5.0°C Frostschutz.", self.room_name)
+                await self.hass.services.async_call(
+                    "climate", "set_temperature",
+                    {"entity_id": self.tado_climate_entity, "temperature": 5.0},
+                    blocking=False
+                )
+                return self.data # End cycle
+
+            # ACTION 2: Window just CLOSED -> Restore heating immediately
+            elif not self.data.window_open and old_window_state:
+                _LOGGER.info("[%s] Fenster geschlossen. Heizung wird sofort wiederhergestellt.", self.room_name)
+                await self.async_calculate_and_apply_compensation(force=True)
+                return self.data # End cycle
+            # --- WINDOW LOGIC END ---
 
             # Track heating cycles for learning
             # self._track_heating_cycle()
