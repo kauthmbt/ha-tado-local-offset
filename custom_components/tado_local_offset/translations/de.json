@@ -8,21 +8,36 @@
           "room_name": "Raumname",
           "tado_device": "Tado Thermostat (HomeKit)",
           "external_temp_sensor": "Externer Temperatursensor"
+        },
+        "data_description": {
+          "room_name": "Z.B. 'Wohnzimmer' oder 'Jugendzimmer'",
+          "tado_device": "Das über HomeKit eingebundene Tado-Gerät",
+          "external_temp_sensor": "Der Sensor, der die 'echte' Raumtemperatur liefert"
+        }
+      },
+      "sensors": {
+        "title": "2. Sensor-Zuordnung",
+        "description": "Bitte überprüfe die automatisch erkannten Tado-Entitäten für diesen Raum.",
+        "data": {
+          "tado_climate_entity": "Tado Klima-Entität",
+          "tado_temp_sensor": "Tado interner Sensor",
+          "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)"
         }
       },
       "window_detection": {
-        "title": "2. Fenster-Erkennung",
+        "title": "3. Fenster-Erkennung",
         "description": "Wie soll das System auf offene Fenster reagieren?",
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
           "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl)",
+          "window_open_delay": "Verzögerung beim Öffnen (Sekunden)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Abfall-Limit (°C)"
         }
       },
       "advanced_settings": {
-        "title": "3. Erweiterte Einstellungen",
-        "description": "Feintuning für die Regelung und das Lernen.",
+        "title": "4. Erweiterte Einstellungen",
+        "description": "Feintuning für Toleranz, Batterie und Vorheizen.",
         "data": {
           "tolerance": "Temperatur-Toleranz (°C)",
           "backoff_minutes": "Wartezeit (Minuten)",
@@ -39,6 +54,7 @@
     "step": {
       "general_settings": {
         "title": "Allgemeine Einstellungen",
+        "description": "Grundparameter der Kompensation.",
         "data": {
           "tolerance": "Temperatur-Toleranz (°C)",
           "backoff_minutes": "Wartezeit (Minuten)",
@@ -47,15 +63,17 @@
       },
       "window_detection": {
         "title": "Fenster-Erkennung",
+        "description": "Konfiguration der Abschaltung bei offenem Fenster.",
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
-          "window_sensor": "Fenster-/Türsensoren",
+          "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Abfall-Limit (°C)"
         }
       },
       "advanced_settings": {
         "title": "Erweiterte Einstellungen & Vorheizen",
+        "description": "Lernfunktion und Puffer-Zeiten.",
         "data": {
           "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
@@ -68,15 +86,15 @@
   "services": {
     "force_compensation": {
       "name": "Korrektur erzwingen",
-      "description": "Offset sofort ohne Wartezeit senden."
+      "description": "Offset sofort ohne Wartezeit an Tado senden."
     },
     "reset_learning": {
       "name": "Lernen zurücksetzen",
-      "description": "Gelernten Durchschnitt für diesen Raum löschen."
+      "description": "Gelernten Durchschnitt (History) für diesen Raum löschen."
     },
     "set_preheat": {
       "name": "Vorheizen planen",
-      "description": "Startzeitpunkt basierend auf Zielzeit berechnen.",
+      "description": "Startzeitpunkt basierend auf Zielzeit und gelernter Rate berechnen.",
       "fields": {
         "target_time": {
           "name": "Ziel-Uhrzeit",
