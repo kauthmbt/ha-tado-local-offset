@@ -26,6 +26,7 @@ CONF_ENABLE_PREHEAT: Final = "enable_preheat"
 CONF_LEARNING_BUFFER: Final = "learning_buffer"
 CONF_MIN_PREHEAT_MINUTES: Final = "min_preheat_minutes"
 CONF_MAX_PREHEAT_MINUTES: Final = "max_preheat_minutes"
+CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay"
 
 # Default values
 DEFAULT_TEMP_DROP_THRESHOLD: Final = 1.0
@@ -58,6 +59,7 @@ TEMP_DROP_WINDOW_MINUTES: Final = 5
 TEMP_DROP_RATE_THRESHOLD: Final = 0.15  # °C per minute
 
 # Window detection delays
+WINDOW_OPEN_DELAY_SECONDS: Final = 120
 WINDOW_CLOSE_DELAY_SECONDS: Final = 120  # 2 minutes
 
 # Attribute names
