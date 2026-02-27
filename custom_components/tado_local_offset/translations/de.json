@@ -67,6 +67,7 @@
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
           "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl)",
+		  "window_open_delay": "Verzögerung beim Öffnen (Sekunden)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Abfall-Limit (°C)"
         }
