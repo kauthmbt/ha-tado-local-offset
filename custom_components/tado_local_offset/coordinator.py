@@ -430,7 +430,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             return 45  # Conservative default
 
         temp_rise_needed = self.data.desired_temp - self.data.external_temp
-        minutes_needed = temp_rise_needed / self.data.heating_rate
+        minutes_needed = (temp_rise_needed / self.data.heating_rate) * 60
 
         # Add safety buffer
         buffered = minutes_needed * (1 + self.learning_buffer / 100)
