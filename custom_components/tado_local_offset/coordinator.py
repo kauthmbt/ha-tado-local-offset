@@ -598,7 +598,16 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             return None
 
         instant_rate = temp_diff / duration_hrs
+        duration_mins = duration_hrs * 60
         
+        # fix: correct preheat units and add outlier filtering for heating rate
+        if duration_mins < 15 or instant_rate > 1.5:
+            _LOGGER.info(
+                "Ignoriere Ausreißer im %s: %.2f °C/h nach %d Min", 
+                self.room_name, instant_rate, duration_mins
+            )
+            return None
+
         self.data.heating_history.append(instant_rate)
         
         from .const import MAX_HEATING_CYCLES, MIN_HEATING_RATE, MAX_HEATING_RATE
