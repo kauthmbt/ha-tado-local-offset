@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, KW_ONLY
 from datetime import datetime, timedelta
+from homeassistant.util import dt as dt_util
 from typing import Any
 
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE
@@ -91,7 +92,8 @@ class TadoLocalOffsetData:
     compensation_enabled: bool = True
     battery_saver_enabled: bool = True
     window_override: bool = False
-    
+    target_time: Any | None = None
+    target_temperature: float = 0.0
     # This is a special marker for Python 3.13.
     _: KW_ONLY 
     
@@ -297,9 +299,33 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             # Track heating cycles for learning
             # self._track_heating_cycle()
 
-            # Calculate pre-heat time if enabled
+            # Calculate pre-heat time and trigger if necessary
             if self.enable_preheat:
-                self.data.preheat_minutes = self._calculate_preheat_minutes()
+                # Use the internal function which accesses self.data directly
+                preheat_mins = self._calculate_preheat_minutes() 
+                self.data.preheat_minutes = preheat_mins
+
+                # TRIGGER LOGIC: Check if we need to start heating early
+                if hasattr(self.data, 'target_time') and self.data.target_time and self.data.target_temperature > self.data.tado_target:
+                    now = dt_util.now()
+                    target_dt = datetime.combine(now.date(), self.data.target_time)
+                    target_dt = dt_util.as_local(target_dt)
+
+                    # Cleanup after 30 mins past target
+                    if now > target_dt + timedelta(minutes=30):
+                        _LOGGER.debug("Pre-heat target for %s passed. Resetting.", self.room_name)
+                        self.data.target_time = None
+                        self.data.target_temperature = 0
+                    
+                    # Start heating if current time + needed minutes reaches target
+                    elif now + timedelta(minutes=preheat_mins) >= target_dt:
+                        _LOGGER.info(
+                            "Smart Pre-heat Trigger for %s: Starting heat-up to %.1f°C (%d min before target)",
+                            self.room_name, self.data.target_temperature, preheat_mins
+                        )
+                        # Update both for persistent storage and immediate local calculation
+                        self.data.desired_temp = self.data.target_temperature
+                        desired_temp = self.data.target_temperature
 
             # If an external change was detected, re-apply compensation
             # so the offset adjustment targets the new desired temperature
