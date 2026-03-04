@@ -227,7 +227,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
                 self.data.external_temp = external_temp
                 self.data.tado_temp = tado_temp
-                _LOGGER.info("[%s] Temperatures updated for Tado %s (Extern %s)", 
+                _LOGGER.info("[%s] Temperatures updated for Tado %s (External %s)", 
                              self.room_name, tado_temp, external_temp)
                     
             except (ValueError, TypeError) as err:
