@@ -503,9 +503,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             
             force_send_due_to_target_reached = True
         else:
-            raw_target = self.data.desired_temp + self.data.offset
+            raw_target = self.data.desired_temp - self.data.offset
             compensated_target = round(raw_target * 2) / 2
             force_send_due_to_target_reached = False
+            
+            _LOGGER.debug("%s: Heating active. Target: %.1f, Offset: %.1f -> Compensated: %.1f",
+                         self.room_name, self.data.desired_temp, self.data.offset, compensated_target)
 
         compensated_target = max(5.0, min(25.0, compensated_target))
 
