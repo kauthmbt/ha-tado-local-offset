@@ -135,16 +135,18 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         
         # Configuration - First check Options (UI change), then Data (initial setup), then Default
-        self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, 0.3))
         self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
-        self.learning_buffer = entry.options.get(CONF_LEARNING_BUFFER, entry.data.get(CONF_LEARNING_BUFFER, 10))
         self.min_preheat_minutes = entry.options.get(CONF_MIN_PREHEAT_MINUTES, entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15))
         self.max_preheat_minutes = entry.options.get(CONF_MAX_PREHEAT_MINUTES, entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120))
         
         # Boolean Values 
         self.enable_temp_drop_detection = entry.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False))
         self.enable_preheat = entry.options.get(CONF_ENABLE_PREHEAT, entry.data.get(CONF_ENABLE_PREHEAT, False))
-
+        from .const import DEFAULT_TEMP_DROP_THRESHOLD, DEFAULT_TOLERANCE, DEFAULT_LEARNING_BUFFER
+        
+        self.temp_drop_threshold = entry.options.get(CONF_TEMP_DROP_THRESHOLD, entry.data.get(CONF_TEMP_DROP_THRESHOLD, DEFAULT_TEMP_DROP_THRESHOLD))
+        self.tolerance = entry.options.get(CONF_TOLERANCE, entry.data.get(CONF_TOLERANCE, DEFAULT_TOLERANCE))
+        self.learning_buffer = entry.options.get(CONF_LEARNING_BUFFER, entry.data.get(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER))
         # Internal state
         self._last_compensation_time: datetime | None = None
         self._last_sent_compensated_target: float | None = None
@@ -183,14 +185,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             CONF_ENABLE_WINDOW_DETECTION,
             entry.data.get(CONF_ENABLE_WINDOW_DETECTION, False)
         )
-        self.enable_temp_drop_detection = entry.options.get(
-            CONF_ENABLE_TEMP_DROP_DETECTION,
-            entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False)
-        )
         
     async def _async_update_data(self) -> TadoLocalOffsetData:
         """Fetch data from sensors and calculate compensation."""
         try:
+            if not self.data.heating_history:
+                await self.async_load_data()
             if not self.external_temp_sensor or not self.tado_temp_sensor or not self.tado_climate_entity:
                 _LOGGER.debug("Sensors for %s not yet fully initialized", self.room_name)
                 return self.data
@@ -252,7 +252,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 if self._heating_start_time is None:
                     self._heating_start_time = dt_util.utcnow()
                     self._heating_start_temp = self.data.external_temp 
-                    _LOGGER.info("Heating cycle learning started at %.2f°C (External)", self.data.external_temp)
+                    _LOGGER.info("[%s] Heating cycle learning started at %.2f°C (External)", self.room_name, self.data.external_temp)
                 else:
                     # We only call the function. 
                     # It takes care of the list, the average, and saving internally.
@@ -301,8 +301,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
             # Calculate pre-heat time and trigger if necessary
             if self.enable_preheat:
-                # Use the internal function which accesses self.data directly
-                preheat_mins = self._calculate_preheat_minutes() 
+                # Use the internal function which accesses self.data directly HERE
+                preheat_mins = self._calculate_preheat_minutes(self.data.target_temperature if self.data.target_temperature > 0 else None)
                 self.data.preheat_minutes = preheat_mins
 
                 # TRIGGER LOGIC: Check if we need to start heating early
@@ -325,7 +325,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         )
                         # Update both for persistent storage and immediate local calculation
                         self.data.desired_temp = self.data.target_temperature
-                        desired_temp = self.data.target_temperature
+                        await self.async_calculate_and_apply_compensation(force=True)
+                        #desired_temp = self.data.target_temperature
 
             # If an external change was detected, re-apply compensation
             # so the offset adjustment targets the new desired temperature
@@ -447,21 +448,27 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
 
 
-    def _calculate_preheat_minutes(self) -> int:
+    def _calculate_preheat_minutes(self, target_temp: float | None = None) -> int:
         """Calculate minutes needed to reach desired temperature."""
-        if self.data.desired_temp <= self.data.external_temp:
+        # Use target_temp (from the pre-heat service) if available, otherwise use the current desired_temp
+        check_temp = target_temp if target_temp is not None else self.data.desired_temp
+        
+        # Safety check: If target already reached or colder, we need 0 minutes.
+        if check_temp <= self.data.external_temp:
             return 0
 
+        # Fallback if no heating rate has been learned yet
         if self.data.heating_rate <= 0:
-            return 45  # Conservative default
+            return 45  # Conservative default value
 
-        temp_rise_needed = self.data.desired_temp - self.data.external_temp
+        # Real calculation
+        temp_rise_needed = check_temp - self.data.external_temp
         minutes_needed = (temp_rise_needed / self.data.heating_rate) * 60
 
-        # Add safety buffer
+        # Add buffer (from your settings, e.g. 10%)
         buffered = minutes_needed * (1 + self.learning_buffer / 100)
 
-        # Clamp to configured range
+        # Limitation to your set min/max values (e.g. 15-120 min)
         return int(max(self.min_preheat_minutes, min(self.max_preheat_minutes, buffered)))
 
     async def async_set_desired_temperature(self, temperature: float) -> None:
@@ -627,7 +634,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         duration_mins = duration_hrs * 60
         
         # fix: correct preheat units and add outlier filtering for heating rate
-        if duration_mins < 15 or instant_rate > 1.5:
+        if duration_mins < 15 or instant_rate > MAX_HEATING_RATE:
             _LOGGER.info(
                 "Ignoriere Ausreißer im %s: %.2f °C/h nach %d Min", 
                 self.room_name, instant_rate, duration_mins
@@ -662,7 +669,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 "Historical heating data for %s loaded. Current rate: %.4f °C/h", 
                 self.room_name, self.data.heating_rate
             )
-
+        self.async_update_listeners()
 
     async def _async_save_data(self) -> None:
         """Speichert die aktuelle Historie dauerhaft in eine JSON-Datei."""
