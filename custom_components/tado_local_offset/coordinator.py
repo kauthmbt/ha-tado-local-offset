@@ -626,11 +626,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # IMPORTANT: temp_diff is based on the external sensor value here. 
         temp_diff = current_external_temp - self._heating_start_temp
 
-        # Filter for stable learning: 
-        # Min. 6 min runtime (0.1h) and 0.1°C increase at the EXTERNAL sensor.
-        if duration_hrs < 0.1 or temp_diff < 0.1:
-            _LOGGER.debug("%s: Cycle too short or delta too small for learning (%.2fh, %.2f°C)", 
-                         self.room_name, duration_hrs, temp_diff)
+        # Filter for stable learning:
+        # Require min. 15 min runtime (0.25h), 0.2°C increase at the EXTERNAL sensor,
+        # and a minimum heating rate of 0.4 °C/h to filter out solar gains or idle periods.
+        if duration_hrs < 0.25 or temp_diff < 0.2 or instant_rate < 0.4:
+            _LOGGER.debug(
+                "%s: Cycle ignored - Duration: %.2fh, Delta: %.2f°C, Rate: %.2f°C/h (Thresholds not met)", 
+                self.room_name, duration_hrs, temp_diff, instant_rate
+            )
             return None
 
         instant_rate = temp_diff / duration_hrs
