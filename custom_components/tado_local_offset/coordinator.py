@@ -645,8 +645,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             return None
 
         self.data.heating_history.append(instant_rate)
-        
-        from .const import MAX_HEATING_CYCLES, MIN_HEATING_RATE, MAX_HEATING_RATE
+                
         if len(self.data.heating_history) > MAX_HEATING_CYCLES:
             self.data.heating_history.pop(0)
 
