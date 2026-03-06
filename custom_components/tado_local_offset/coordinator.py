@@ -623,12 +623,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # --- End of new logic ---
         duration_hrs = (now - self._heating_start_time).total_seconds() / 3600
         
-        # IMPORTANT: temp_diff is based on the external sensor value here. 
+        # 1. ERST DIE VARIABLEN DEFINIEREN
         temp_diff = current_external_temp - self._heating_start_temp
+        instant_rate = temp_diff / duration_hrs
+        duration_mins = duration_hrs * 60
 
-        # Filter for stable learning:
-        # Require min. 15 min runtime (0.25h), 0.2°C increase at the EXTERNAL sensor,
-        # and a minimum heating rate of 0.4 °C/h to filter out solar gains or idle periods.
+        # 2. DANN DER NEUE FILTER (Verhindert kleine/falsche Zahlen)
         if duration_hrs < 0.25 or temp_diff < 0.2 or instant_rate < 0.4:
             _LOGGER.debug(
                 "%s: Cycle ignored - Duration: %.2fh, Delta: %.2f°C, Rate: %.2f°C/h (Thresholds not met)", 
@@ -636,31 +636,26 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             )
             return None
 
-        instant_rate = temp_diff / duration_hrs
-        duration_mins = duration_hrs * 60
-        
-        # fix: correct preheat units and add outlier filtering for heating rate
-        if duration_mins < 15 or instant_rate > MAX_HEATING_RATE:
+        # 3. DER ALTE SICHERHEITSFILTER (Verhindert extreme Ausreißer nach oben)
+        if instant_rate > MAX_HEATING_RATE:
             _LOGGER.info(
-                "Ignoriere Ausreißer im %s: %.2f °C/h nach %d Min", 
-                self.room_name, instant_rate, duration_mins
+                "Ignoriere Ausreißer im %s: %.2f °C/h (Max: %.1f)", 
+                self.room_name, instant_rate, MAX_HEATING_RATE
             )
             return None
 
+        # 4. DATEN SPEICHERN (Nur einmal!)
         self.data.heating_history.append(instant_rate)
-                
+        
         if len(self.data.heating_history) > MAX_HEATING_CYCLES:
             self.data.heating_history.pop(0)
 
         self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
-
         self.hass.async_create_task(self._async_save_data())
 
-        if MIN_HEATING_RATE <= instant_rate <= MAX_HEATING_RATE:
-            return instant_rate
-            
-        return None
+        return instant_rate
 
+        
     async def async_load_data(self) -> None:
         """Lädt die historische Heizrate beim Start aus dem JSON-Speicher."""
         stored_data = await self._store.async_load()
