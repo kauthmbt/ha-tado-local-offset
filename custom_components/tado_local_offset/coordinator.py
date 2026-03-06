@@ -18,7 +18,6 @@ from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.storage import Store
 # ------------------------------------
-from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_OFFSET,
@@ -61,18 +60,7 @@ STORAGE_KEY = f"{DOMAIN}_storage"
 STORAGE_VERSION = 1
 
 _LOGGER = logging.getLogger(__name__) 
-# ---------------------
-@dataclass
-#class HeatingCycle:
-#    """Represents a single heating cycle for learning."""
-#
-#    start_time: datetime
-#    end_time: datetime
-#    start_temp: float
-#    end_temp: float
-#    duration_minutes: float
-#    temp_rise: float
-#    rate: float  # °C per minute
+
 
 @dataclass
 class TadoLocalOffsetData:
@@ -246,7 +234,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 self.data.hvac_mode = "heat"
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
-            # --- NEW: Live-Learning ---
+            # --- Live-Learning ---
             current_hvac = self.data.hvac_action
             if current_hvac == "heating":
                 if self._heating_start_time is None:
@@ -262,7 +250,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     _LOGGER.info("[%s] Heating cycle completed. Data has been processed.", self.room_name)
                 self._heating_start_time = None
                 self._heating_start_temp = None
-            # --- END NEW ---
             # Calculate offset
             self.data.offset = external_temp - tado_temp
 
@@ -295,16 +282,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 await self.async_calculate_and_apply_compensation(force=True)
                 return self.data # End cycle
             # --- WINDOW LOGIC END ---
-
-            # Track heating cycles for learning
-            # self._track_heating_cycle()
-
             # Calculate pre-heat time and trigger if necessary
             if self.enable_preheat:
                 # Use the internal function which accesses self.data directly HERE
                 preheat_mins = self._calculate_preheat_minutes(self.data.target_temperature if self.data.target_temperature > 0 else None)
                 self.data.preheat_minutes = preheat_mins
-
                 # Update next_preheat_start for the sensor entity
                 if hasattr(self.data, 'target_time') and self.data.target_time:
                     now = dt_util.now()
@@ -313,7 +295,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     self.data.next_preheat_start = target_dt - timedelta(minutes=preheat_mins)
                 else:
                     self.data.next_preheat_start = None
-                    
                 # TRIGGER LOGIC: Check if we need to start heating early
                 if hasattr(self.data, 'target_time') and self.data.target_time and self.data.target_temperature > self.data.tado_target:
                     now = dt_util.now()
@@ -335,7 +316,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         # Update both for persistent storage and immediate local calculation
                         self.data.desired_temp = self.data.target_temperature
                         await self.async_calculate_and_apply_compensation(force=True)
-                        #desired_temp = self.data.target_temperature
 
             # If an external change was detected, re-apply compensation
             # so the offset adjustment targets the new desired temperature
@@ -483,7 +463,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     async def async_set_desired_temperature(self, temperature: float) -> None:
         """Set desired temperature and trigger compensation immediately."""
         self.data.desired_temp = max(MIN_TEMP, min(MAX_TEMP, temperature))
-        # Sofortige Kompensation erzwingen
+        # Mandatory compensation update
         await self.async_calculate_and_apply_compensation(force=True)
 
     async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
@@ -615,7 +595,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if self._heating_start_time is None or self._heating_start_temp is None:
             return None
 
-        # --- NEW: Lockout period after window closure (calming phase)  ---
+        # --- Lockout period after window closure (calming phase)  ---
         now = dt_util.utcnow()
         if self.window_sensor:
             for sensor_id in self.window_sensor:
@@ -629,15 +609,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                             self.room_name, time_since_close
                         )
                         return None
-        # --- End of new logic ---
         duration_hrs = (now - self._heating_start_time).total_seconds() / 3600
         
-        # 1. ERST DIE VARIABLEN DEFINIEREN
+        # 1. DEFINE VARIABLES
         temp_diff = current_external_temp - self._heating_start_temp
         instant_rate = temp_diff / duration_hrs
         duration_mins = duration_hrs * 60
 
-        # 2. DANN DER NEUE FILTER (Verhindert kleine/falsche Zahlen)
+        # 2. FILTER (to prevent too small/wrong numbers)
         if duration_hrs < 0.25 or temp_diff < 0.2 or instant_rate < 0.4:
             _LOGGER.debug(
                 "%s: Cycle ignored - Duration: %.2fh, Delta: %.2f°C, Rate: %.2f°C/h (Thresholds not met)", 
@@ -645,7 +624,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             )
             return None
 
-        # 3. DER ALTE SICHERHEITSFILTER (Verhindert extreme Ausreißer nach oben)
+        # 3. SECURITY-FILTEER
         if instant_rate > MAX_HEATING_RATE:
             _LOGGER.info(
                 "Ignoriere Ausreißer im %s: %.2f °C/h (Max: %.1f)", 
@@ -653,7 +632,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             )
             return None
 
-        # 4. DATEN SPEICHERN (Nur einmal!)
+        # 4. SAVE DATA (just one time!)
         self.data.heating_history.append(instant_rate)
         
         if len(self.data.heating_history) > MAX_HEATING_CYCLES:
