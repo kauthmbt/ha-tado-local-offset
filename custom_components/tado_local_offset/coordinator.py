@@ -305,6 +305,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 preheat_mins = self._calculate_preheat_minutes(self.data.target_temperature if self.data.target_temperature > 0 else None)
                 self.data.preheat_minutes = preheat_mins
 
+                # Update next_preheat_start for the sensor entity
+                if hasattr(self.data, 'target_time') and self.data.target_time:
+                    now = dt_util.now()
+                    target_dt = datetime.combine(now.date(), self.data.target_time)
+                    target_dt = dt_util.as_local(target_dt)
+                    self.data.next_preheat_start = target_dt - timedelta(minutes=preheat_mins)
+                else:
+                    self.data.next_preheat_start = None
+                    
                 # TRIGGER LOGIC: Check if we need to start heating early
                 if hasattr(self.data, 'target_time') and self.data.target_time and self.data.target_temperature > self.data.tado_target:
                     now = dt_util.now()
