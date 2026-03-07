@@ -300,7 +300,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     start_time = target_dt - timedelta(minutes=preheat_mins)
                     
                     # 3. Check: START already passed?
-                    if start_time < now:                        
+                    if start_time < (now - timedelta(minutes=5)):                        
                         # If yes, move it to tomorrow
                         start_time += timedelta(days=1)
                         target_dt += timedelta(days=1)
