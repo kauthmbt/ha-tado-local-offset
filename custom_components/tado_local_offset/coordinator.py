@@ -1,4 +1,5 @@
 """Data update coordinator for Tado Local Offset."""
+# pyright: reportMissingImports=false, reportMissingModuleSource=false
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, KW_ONLY
@@ -291,11 +292,19 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 # Update next_preheat_start for the sensor entity
                 if hasattr(self.data, 'target_time') and self.data.target_time:
                     now = dt_util.now()
+                    # 1. Set target date for today
                     target_dt = datetime.combine(now.date(), self.data.target_time)
                     target_dt = dt_util.as_local(target_dt)
+                    
+                    # 2. Extract preheat_mins
                     start_time = target_dt - timedelta(minutes=preheat_mins)
-                    if start_time < now:
+                    
+                    # 3. Check: START already passed?
+                    if start_time < now:                        
+                        # If yes, move it to tomorrow
                         start_time += timedelta(days=1)
+                        target_dt += timedelta(days=1)
+                        
                     self.data.next_preheat_start = start_time
                 else:
                     self.data.next_preheat_start = None
