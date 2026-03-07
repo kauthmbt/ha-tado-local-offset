@@ -292,7 +292,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     now = dt_util.now()
                     target_dt = datetime.combine(now.date(), self.data.target_time)
                     target_dt = dt_util.as_local(target_dt)
-                    self.data.next_preheat_start = target_dt - timedelta(minutes=preheat_mins)
+                    start_time = target_dt - timedelta(minutes=preheat_mins)
+                    if start_time < now:
+                        start_time += timedelta(days=1)
+                    self.data.next_preheat_start = start_time
                 else:
                     self.data.next_preheat_start = None
                 # TRIGGER LOGIC: Check if we need to start heating early
