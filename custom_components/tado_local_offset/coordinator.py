@@ -82,6 +82,7 @@ class TadoLocalOffsetData:
     window_override: bool = False
     target_time: Any | None = None
     target_temperature: float = 0.0
+    is_preheating: bool = False
     # This is a special marker for Python 3.13.
     _: KW_ONLY 
     
