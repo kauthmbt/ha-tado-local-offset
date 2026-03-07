@@ -299,26 +299,34 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 else:
                     self.data.next_preheat_start = None
                 # TRIGGER LOGIC: Check if we need to start heating early
-                if hasattr(self.data, 'target_time') and self.data.target_time and self.data.target_temperature > self.data.tado_target:
+                if not self.data.is_preheating and self.data.next_preheat_start:
                     now = dt_util.now()
+                    
+                    # 1. Cleanup: Reset if target time is more than 30 mins in the past
+                    # This now considers the actual calculated start date/time
                     target_dt = datetime.combine(now.date(), self.data.target_time)
                     target_dt = dt_util.as_local(target_dt)
-
-                    # Cleanup after 30 mins past target
-                    if now > target_dt + timedelta(minutes=30):
-                        _LOGGER.debug("Pre-heat target for %s passed. Resetting.", self.room_name)
+                    
+                    if now > target_dt + timedelta(minutes=30) and now > self.data.next_preheat_start + timedelta(minutes=30):
+                        _LOGGER.debug("[%s] Pre-heat target passed. Resetting values.", self.room_name)
                         self.data.target_time = None
                         self.data.target_temperature = 0
-                    
-                    # Start heating if current time + needed minutes reaches target
-                    elif now + timedelta(minutes=preheat_mins) >= target_dt:
-                        _LOGGER.info(
-                            "Smart Pre-heat Trigger for %s: Starting heat-up to %.1f°C (%d min before target)",
-                            self.room_name, self.data.target_temperature, preheat_mins
-                        )
-                        # Update both for persistent storage and immediate local calculation
-                        self.data.desired_temp = self.data.target_temperature
-                        await self.async_calculate_and_apply_compensation(force=True)
+                        self.data.next_preheat_start = None
+
+                    # 2. Start heating: Trigger if start time reached AND window is CLOSED
+                    elif now >= self.data.next_preheat_start:
+                        if not self.data.window_open:
+                            _LOGGER.info(
+                                "Smart Pre-heat Trigger for %s: Starting heat-up to %.1f°C (Planned start: %s)",
+                                self.room_name, self.data.target_temperature, self.data.next_preheat_start
+                            )
+                            self.data.is_preheating = True
+                            self.data.desired_temp = self.data.target_temperature
+                            await self.async_calculate_and_apply_compensation(force=True)
+                        else:
+                            # Log a warning if heating is blocked by an open window
+                            # This will repeat every coordinator update until window closes or time expires
+                            _LOGGER.warning("[%s] Pre-heat time reached, but window is OPEN. Waiting for closure...", self.room_name)
 
             # If an external change was detected, re-apply compensation
             # so the offset adjustment targets the new desired temperature
