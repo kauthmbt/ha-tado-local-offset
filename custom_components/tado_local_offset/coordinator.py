@@ -1,4 +1,5 @@
 """Data update coordinator for Tado Local Offset."""
+# pyright: reportMissingImports=false, reportMissingModuleSource=false
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field, KW_ONLY
@@ -82,6 +83,7 @@ class TadoLocalOffsetData:
     window_override: bool = False
     target_time: Any | None = None
     target_temperature: float = 0.0
+    is_preheating: bool = False
     # This is a special marker for Python 3.13.
     _: KW_ONLY 
     
@@ -284,50 +286,99 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             # --- WINDOW LOGIC END ---
             # Calculate pre-heat time and trigger if necessary
             if self.enable_preheat:
-                # Use the internal function which accesses self.data directly HERE
-                preheat_mins = self._calculate_preheat_minutes(self.data.target_temperature if self.data.target_temperature > 0 else None)
-                self.data.preheat_minutes = preheat_mins
-                # Update next_preheat_start for the sensor entity
-                if hasattr(self.data, 'target_time') and self.data.target_time:
-                    now = dt_util.now()
-                    target_dt = datetime.combine(now.date(), self.data.target_time)
-                    target_dt = dt_util.as_local(target_dt)
-                    self.data.next_preheat_start = target_dt - timedelta(minutes=preheat_mins)
-                else:
-                    self.data.next_preheat_start = None
-                # TRIGGER LOGIC: Check if we need to start heating early
-                if hasattr(self.data, 'target_time') and self.data.target_time and self.data.target_temperature > self.data.tado_target:
-                    now = dt_util.now()
-                    target_dt = datetime.combine(now.date(), self.data.target_time)
-                    target_dt = dt_util.as_local(target_dt)
+                now = dt_util.now()
+                
+                # 1. Fetch outside temperature (Your specific sensor)
+                outside_temp = None
+                outside_temp_state = self.hass.states.get("sensor.aussentemperatur_heizungskontrolle")
+                
+                if outside_temp_state and outside_temp_state.state not in [STATE_UNKNOWN, STATE_UNAVAILABLE]:
+                    try:
+                        outside_temp = float(outside_temp_state.state)
+                    except ValueError:
+                        _LOGGER.warning("[%s] Invalid outside temperature: %s", self.room_name, outside_temp_state.state)
 
-                    # Cleanup after 30 mins past target
-                    if now > target_dt + timedelta(minutes=30):
-                        _LOGGER.debug("Pre-heat target for %s passed. Resetting.", self.room_name)
-                        self.data.target_time = None
+                # 2. Proceed if target_time order exists
+                if self.data.target_time is not None:
+                    # FIX: Handle potential UTC/Local timestamp issues exactly as required
+                    target_dt = datetime.combine(now.date(), self.data.target_time)
+                    target_dt = dt_util.as_local(target_dt)
+                    
+                    # Calculate base preheat minutes using historical data
+                    preheat_mins = self._calculate_preheat_minutes(
+                        self.data.target_temperature if self.data.target_temperature > 0 else None
+                    )
+                    
+                    # 3. YOUR SPECIFIC CUSTOM FACTOR LOGIC (NO CHANGES)
+                    if outside_temp is not None:
+                        # Comfort threshold: From 18.0°C downwards, more time is allowed.
+                        threshold = 18.0
+                        diff = max(0, threshold - outside_temp)
+                        
+                        # Differentiation: Basement/office (5% per degree) vs. rest (3% per degree)
+                        if any(keller_name in self.room_name for keller_name in ["Office", "Keller"]):
+                            factor = 1.0 + (diff * 0.05)
+                        else:
+                            factor = 1.0 + (diff * 0.03)
+                            
+                        # Calculation of time with safety cover (max. 88 minutes for 90-minute trigger)
+                        preheat_mins = int(preheat_mins * factor)
+                        preheat_mins = min(preheat_mins, 88)
+                        
+                        _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Factor {factor:.2f} -> {preheat_mins} Min")
+                    
+                    # Apply secondary safety from config
+                    min_mins = self.config_entry.options.get(
+                        CONF_MIN_PREHEAT_MINUTES, 
+                        self.config_entry.data.get(CONF_MIN_PREHEAT_MINUTES, 5)
+                    )
+                    preheat_mins = max(min_mins, preheat_mins)
+
+                    self.data.preheat_minutes = preheat_mins
+                    start_time = target_dt - timedelta(minutes=preheat_mins)
+                    self.data.next_preheat_start = start_time
+
+                    # --- STATE DECISION (THE RESET FIX) ---
+
+                    # CASE A: Target reached -> RESET ORDER (Prevents weekend/rollover issue)
+                    if now >= target_dt:
+                        _LOGGER.info("[%s] Pre-heat target reached. Resetting order to None.", self.room_name)
+                        self.data.is_preheating = False
+                        self.data.target_time = None  # The Fix: Clears the order
+                        self.data.next_preheat_start = None
                         self.data.target_temperature = 0
                     
-                    # Start heating if current time + needed minutes reaches target
-                    elif now + timedelta(minutes=preheat_mins) >= target_dt:
-                        _LOGGER.info(
-                            "Smart Pre-heat Trigger for %s: Starting heat-up to %.1f°C (%d min before target)",
-                            self.room_name, self.data.target_temperature, preheat_mins
-                        )
-                        # Update both for persistent storage and immediate local calculation
-                        self.data.desired_temp = self.data.target_temperature
-                        await self.async_calculate_and_apply_compensation(force=True)
+                    # CASE B: Within window -> ACTIVATE
+                    elif now >= start_time:
+                        if not self.data.window_open:
+                            if not self.data.is_preheating:
+                                _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C", self.room_name, self.data.target_temperature)
+                            self.data.is_preheating = True
+                            self.data.desired_temp = self.data.target_temperature
+                        else:
+                            # Window open: track that we should preheat, but don't set temperature
+                            self.data.is_preheating = False
+                    
+                    # CASE C: Outside of window
+                    else:
+                        self.data.is_preheating = False
+                else:
+                    # No order active
+                    self.data.is_preheating = False
+                    self.data.next_preheat_start = None
 
-            # If an external change was detected, re-apply compensation
-            # so the offset adjustment targets the new desired temperature
+            # --- COMPENSATION & EXTERNAL CHANGE (ORIGINAL LOGIC) ---
             if external_change:
+                _LOGGER.debug("[%s] External change detected, re-applying compensation", self.room_name)
+                await self.async_calculate_and_apply_compensation()
+            elif not self.data.window_open:
                 await self.async_calculate_and_apply_compensation()
 
-            return self.data
-
-        except UpdateFailed:
-            raise
         except Exception as err:
-            raise UpdateFailed(f"Error updating Tado Local Offset data: {err}") from err
+            _LOGGER.error("[%s] Error updating data: %s", self.room_name, err)
+            raise UpdateFailed(f"Error communicating with Tado: {err}") from err
+
+        return self.data
 
     def _detect_external_target_change(self) -> bool:
         """Erkennt Änderungen am Tado-Thermostat (App, Zeitplan, Drehrad)."""
