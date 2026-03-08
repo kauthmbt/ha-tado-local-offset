@@ -71,6 +71,7 @@ ATTR_PREHEAT_MINUTES: Final = "preheat_minutes"
 ATTR_LAST_COMPENSATION: Final = "last_compensation"
 ATTR_WINDOW_OPEN: Final = "window_open"
 ATTR_COMPENSATION_ACTIVE: Final = "compensation_active"
+ATTR_IS_PREHEATING: Final = "is_preheating"
 
 # Service names
 SERVICE_FORCE_COMPENSATION: Final = "force_compensation"

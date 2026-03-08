@@ -42,6 +42,13 @@ BINARY_SENSORS: tuple[TadoLocalOffsetBinarySensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=lambda data: data.compensation_enabled and not (data.window_open and not data.window_override),
     ),
+    TadoLocalOffsetBinarySensorDescription(
+        key="is_preheating",
+        name="Preheating",
+        icon="mdi:fire-alert",
+        device_class=BinarySensorDeviceClass.HEAT,
+        value_fn=lambda data: data.is_preheating,
+    ),
 )
 
 
