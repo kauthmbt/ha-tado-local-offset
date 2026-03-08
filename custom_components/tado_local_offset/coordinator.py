@@ -303,7 +303,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         # Calculation of time with safety cover (max. 88 minutes for 90-minute trigger)
                         preheat_mins = int(preheat_mins * factor)
                         preheat_mins = min(preheat_mins, 88)
-                        _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Faktor {factor:.2f} -> {preheat_mins} Min")
+                        # Only log if actually pre-heating
+                        if preheat_mins > 0:
+                            _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Factor {factor:.2f} -> {preheat_mins} Min") 
                     except ValueError:
                         _LOGGER.warning(f"PREHEAT-ADJUST: Invalid temperature value for {self.room_name}")
                 self.data.preheat_minutes = preheat_mins
