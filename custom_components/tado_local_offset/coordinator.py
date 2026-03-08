@@ -328,7 +328,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Factor {factor:.2f} -> {preheat_mins} Min")
                     
                     # Apply secondary safety from config
-                    min_mins = self._config.get(CONF_MIN_PREHEAT_MINUTES, 5)
+                    min_mins = self.config_entry.options.get(
+                        CONF_MIN_PREHEAT_MINUTES, 
+                        self.config_entry.data.get(CONF_MIN_PREHEAT_MINUTES, 5)
+                    )
                     preheat_mins = max(min_mins, preheat_mins)
 
                     self.data.preheat_minutes = preheat_mins
