@@ -288,6 +288,24 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             if self.enable_preheat:
                 # Use the internal function which accesses self.data directly HERE
                 preheat_mins = self._calculate_preheat_minutes(self.data.target_temperature if self.data.target_temperature > 0 else None)
+                outside_temp_state = self.hass.states.get("sensor.aussentemperatur_heizungskontrolle")
+                if outside_temp_state and outside_temp_state.state not in ["unavailable", "unknown"]:
+                    try:
+                        outside_temp = float(outside_temp_state.state)
+                        # Comfort threshold: From 18.0°C downwards, more time is allowed.
+                        threshold = 18.0
+                        diff = max(0, threshold - outside_temp)
+                        # Differentiation: Basement/office (5% per degree) vs. rest (3% per degree)
+                        if any(keller_name in self.room_name for keller_name in ["Office", "Keller"]):
+                            factor = 1.0 + (diff * 0.05)
+                        else:
+                            factor = 1.0 + (diff * 0.03)
+                        # Calculation of time with safety cover (max. 88 minutes for 90-minute trigger)
+                        preheat_mins = int(preheat_mins * factor)
+                        preheat_mins = min(preheat_mins, 88)
+                        _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Faktor {factor:.2f} -> {preheat_mins} Min")
+                    except ValueError:
+                        _LOGGER.warning(f"PREHEAT-ADJUST: Invalid temperature value for {self.room_name}")
                 self.data.preheat_minutes = preheat_mins
                 # Update next_preheat_start for the sensor entity
                 if hasattr(self.data, 'target_time') and self.data.target_time:
