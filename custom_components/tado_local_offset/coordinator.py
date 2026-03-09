@@ -495,7 +495,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         temp_rise_needed = 0.0
 
         if not self.data.target_time:
-            self._last_reported_mins = 0 # Ensures that the filter responds correctly when restarting
+            if self._last_reported_mins != 0:
+                self._last_reported_mins = 0
+                _LOGGER.debug("Preheat for %s cleared, resetting filter.", self.room_name)
             return 0
         # Use target_temp (from the pre-heat service) if available, otherwise use the current desired_temp
         check_temp = target_temp if target_temp is not None else self.data.desired_temp
@@ -510,20 +512,41 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # Real calculation
         else:
-            # Specific factor
-            current_ext_temp = self.data.external_temp
-            if current_ext_temp is not None:
-                diff_to_18 = 18.0 - current_ext_temp
-                if diff_to_18 > 0:
-                    rate = 0.05 if "office" in self.room_name.lower() or "büro" in self.room_name.lower() else 0.03
-                    factor = 1.0 + (diff_to_18 * rate)
-
-            temp_rise_needed = check_temp - self.data.external_temp
-            minutes_needed = (temp_rise_needed / self.data.heating_rate) * 60 * factor
-            buffered = minutes_needed * (1 + self.learning_buffer / 100)
+            # --- WEATHER ---
+            outside_val = 18.0  # Standardwert
+            out_state = self.hass.states.get("sensor.aussentemperatur_heizungskontrolle")
             
-            # Limit and round result
-            new_val = int(max(self.min_preheat_minutes, min(self.max_preheat_minutes, buffered)))
+            if out_state and out_state.state not in ["unknown", "unavailable"]:
+                try:
+                    outside_val = float(out_state.state)
+                except ValueError:
+                    outside_val = 18.0
+
+            # Calculate Factor
+            diff_outside = 18.0 - outside_val
+            if diff_outside > 0:
+                r_rate = 0.05 if "office" in self.room_name.lower() or "büro" in self.room_name.lower() else 0.03
+                factor = 1.0 + (diff_outside * r_rate)
+            else:
+                factor = 1.0
+
+            # --- ROOM ---
+            room_val = self.data.external_temp 
+            
+            # Safety net: If the room sensor is missing
+            if room_val is None or room_val < 15.0:
+                room_val = self.data.tado_temp
+
+            # Now calculate the real difference
+            temp_rise_needed = max(0.0, check_temp - room_val)
+            
+            # Time
+            minutes_calculated = (temp_rise_needed / self.data.heating_rate) * 60 * factor
+            buffered_val = minutes_calculated * (1 + self.learning_buffer / 100)
+            
+            new_val = int(max(self.min_preheat_minutes, min(self.max_preheat_minutes, buffered_val)))
+            if new_val < 0:
+                new_val = 0
 
         # SPAM-FILTER
         if (abs(new_val - self._last_reported_mins) >= 2) or \
