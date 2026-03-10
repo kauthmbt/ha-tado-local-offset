@@ -309,24 +309,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     preheat_mins = self._calculate_preheat_minutes(
                         self.data.target_temperature if self.data.target_temperature > 0 else None
                     )
-                    
-                    # 3. YOUR SPECIFIC CUSTOM FACTOR LOGIC (NO CHANGES)
-                    if outside_temp is not None:
-                        # Comfort threshold: From 18.0°C downwards, more time is allowed.
-                        threshold = 18.0
-                        diff = max(0, threshold - outside_temp)
-                        
-                        # Differentiation: Basement/office (5% per degree) vs. rest (3% per degree)
-                        if any(keller_name in self.room_name for keller_name in ["Office", "Keller"]):
-                            factor = 1.0 + (diff * 0.05)
-                        else:
-                            factor = 1.0 + (diff * 0.03)
-                            
-                        # Calculation of time with safety cover (max. 88 minutes for 90-minute trigger)
-                        preheat_mins = int(preheat_mins * factor)
-                        preheat_mins = min(preheat_mins, 88)
-                        
-                        _LOGGER.info(f"PREHEAT-ADJUST [{self.room_name}]: {outside_temp}°C -> Factor {factor:.2f} -> {preheat_mins} Min")
+                
+
                     
                     # Apply secondary safety from config
                     min_mins = self.config_entry.options.get(
@@ -491,77 +475,70 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def _calculate_preheat_minutes(self, target_temp: float | None = None) -> int:
         """Calculate minutes needed to reach desired temperature."""
-        factor = 1.0
-        temp_rise_needed = 0.0
-
-        if not self.data.target_time:
-            if self._last_reported_mins != 0:
-                self._last_reported_mins = 0
-                _LOGGER.debug("Preheat for %s cleared, resetting filter.", self.room_name)
-            return 0
-        # Use target_temp (from the pre-heat service) if available, otherwise use the current desired_temp
+        # 1. Determine the relevant target temperature
         check_temp = target_temp if target_temp is not None else self.data.desired_temp
         
-        # Safety check: If target already reached or colder, we need 0 minutes.
-        if check_temp <= self.data.external_temp:
-            new_val = 0
+        # 2. GET CURRENT ROOM TEMPERATURE (With safety fallback)
+        room_now = self.data.external_temp 
+        # Fallback to internal sensor if precision sensor is unavailable or delivers outside temps
+        if room_now is None or room_now < 15.0:
+            room_now = self.data.tado_temp
 
-        # Fallback if no heating rate has been learned yet
-        elif self.data.heating_rate <= 0:
-            new_val = 45  # Conservative default value
-
-        # Real calculation
-        else:
-            # --- WEATHER ---
-            outside_val = 18.0  # Standardwert
-            out_state = self.hass.states.get("sensor.aussentemperatur_heizungskontrolle")
+        # 3. EXIT CONDITIONS (The "Eco-Filter")
+        # Stop calculation if:
+        # - No target temperature is set
+        # - Target is below 7°C (System Off/Frost protection)
+        if check_temp is None or check_temp < 7.0:
+            self._last_reported_mins = 0
+            return 0
             
-            if out_state and out_state.state not in ["unknown", "unavailable"]:
-                try:
-                    outside_val = float(out_state.state)
-                except ValueError:
-                    outside_val = 18.0
+        # Calculate the actual heating demand
+        room_delta = check_temp - room_now
+        
+        # STOP if we are already warm enough or the gap is too small (e.g. 19°C Eco mode)
+        # This prevents "nervous" jumping when sensors fluctuate by 0.1°C
+        if room_delta <= 0.2:
+            if self._last_reported_mins != 0:
+                self._last_reported_mins = 0
+            return 0
 
-            # Calculate Factor
-            diff_outside = 18.0 - outside_val
-            if diff_outside > 0:
-                r_rate = 0.05 if "office" in self.room_name.lower() or "büro" in self.room_name.lower() else 0.03
-                factor = 1.0 + (diff_outside * r_rate)
-            else:
-                factor = 1.0
+        # 4. WEATHER FACTOR CALCULATION (Isolated from room delta)
+        weather_factor = 1.0
+        out_state = self.hass.states.get("sensor.aussentemperatur_heizungskontrolle")
+        
+        if out_state and out_state.state not in ["unknown", "unavailable"]:
+            try:
+                out_temp = float(out_state.state)
+                diff_outside = max(0.0, 18.0 - out_temp)
+                # Apply room-specific cooling sensitivity
+                r_rate = 0.05 if any(k in self.room_name.lower() for k in ["office", "büro", "keller"]) else 0.03
+                weather_factor = 1.0 + (diff_outside * r_rate)
+            except (ValueError, TypeError):
+                weather_factor = 1.0
 
-            # --- ROOM ---
-            room_val = self.data.external_temp 
-            
-            # Safety net: If the room sensor is missing
-            if room_val is None or room_val < 15.0:
-                room_val = self.data.tado_temp
+        # 5. CORE DURATION CALCULATION
+        # Use learned heating rate, or fallback to 1.5 °C/h for new rooms
+        safe_heating_rate = self.data.heating_rate if self.data.heating_rate > 0.1 else 1.5
+        
+        minutes_raw = (room_delta / safe_heating_rate) * 60 * weather_factor
+        buffered = minutes_raw * (1 + self.learning_buffer / 100)
+        
+        # Apply min/max limits from configuration
+        new_val = int(max(self.min_preheat_minutes, min(self.max_preheat_minutes, buffered)))
 
-            # Now calculate the real difference
-            temp_rise_needed = max(0.0, check_temp - room_val)
-            
-            # Time
-            minutes_calculated = (temp_rise_needed / self.data.heating_rate) * 60 * factor
-            buffered_val = minutes_calculated * (1 + self.learning_buffer / 100)
-            
-            new_val = int(max(self.min_preheat_minutes, min(self.max_preheat_minutes, buffered_val)))
-            if new_val < 0:
-                new_val = 0
-
-        # SPAM-FILTER
+        # 6. SPAM FILTER & LOGGING
+        # Only report if change is significant (>= 2 min) or state jumps to/from zero
         if (abs(new_val - self._last_reported_mins) >= 2) or \
            (new_val > 0 and self._last_reported_mins <= 0) or \
            (new_val == 0 and self._last_reported_mins > 0):
             
             self._last_reported_mins = new_val
-            
             _LOGGER.info(
-                "PREHEAT-ADJUST [%s]: %.2f°C -> Factor %.2f -> %s Min", 
-                self.room_name, temp_rise_needed, factor, new_val
+                "PREHEAT-ADJUST [%s]: Delta %.2f°C (Target %.1f) -> Weather-Factor %.2f -> %s Min", 
+                self.room_name, room_delta, check_temp, weather_factor, new_val
             )
             return new_val
 
-        # If the change is too small, retain the old value.
         return self._last_reported_mins
     
     async def async_set_desired_temperature(self, temperature: float) -> None:
