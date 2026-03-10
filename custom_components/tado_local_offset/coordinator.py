@@ -312,12 +312,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 
 
                     
-                    # Apply secondary safety from config
-                    min_mins = self.config_entry.options.get(
-                        CONF_MIN_PREHEAT_MINUTES, 
-                        self.config_entry.data.get(CONF_MIN_PREHEAT_MINUTES, 5)
+                    # Calculate preheat minutes using the new unified function
+                    preheat_mins = self._calculate_preheat_minutes(
+                        self.data.target_temperature if self.data.target_temperature > 0 else None
                     )
-                    preheat_mins = max(min_mins, preheat_mins)
 
                     self.data.preheat_minutes = preheat_mins
                     start_time = target_dt - timedelta(minutes=preheat_mins)
