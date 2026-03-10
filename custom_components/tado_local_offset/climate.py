@@ -88,6 +88,19 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
     def hvac_action(self) -> str | None:
         return self.coordinator.data.hvac_action
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Additional attributes"""
+        if not self.coordinator.data:
+            return {}
+            
+        return {
+            "preheat_order_target": self.coordinator.data.preheat_order_target,
+            "next_preheat_start": self.coordinator.data.next_preheat_start,
+            "preheat_minutes": self.coordinator.data.preheat_minutes,
+            "last_learning_rate": self.coordinator.data.last_learning_rate
+        }
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode - proxy to real Tado."""
         tado_mode = "heat" if hvac_mode == HVACMode.HEAT else "off"
