@@ -21,6 +21,18 @@
       "advanced_settings": { "title": "4. Advanced Settings" }
     }
   },
+  "entity": {
+    "climate": {
+      "tado_local_offset": {
+        "state_attributes": {
+          "preheat_order_target": { "name": "Preheat Target Temp" },
+          "next_preheat_start": { "name": "Next Preheat Start" },
+          "preheat_minutes": { "name": "Preheat Minutes" },
+          "last_learning_rate": { "name": "Last Learning Rate" }
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "general_settings": { "title": "General Settings" },

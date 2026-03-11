@@ -50,6 +50,18 @@
       }
     }
   },
+  "entity": {
+    "climate": {
+      "tado_local_offset": {
+        "state_attributes": {
+          "preheat_order_target": { "name": "Ziel-Temperatur (Vorheizen)" },
+          "next_preheat_start": { "name": "Geplanter Start" },
+          "preheat_minutes": { "name": "Vorheiz-Dauer (Minuten)" },
+          "last_learning_rate": { "name": "Letzte Lernrate" }
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "general_settings": {
