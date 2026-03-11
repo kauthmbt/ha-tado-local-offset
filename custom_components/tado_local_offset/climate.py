@@ -117,7 +117,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
             "preheat_order_target": self.coordinator.data.preheat_order_target,
             "next_preheat_start": self.coordinator.data.next_preheat_start,
             "preheat_minutes": self.coordinator.data.preheat_minutes,
-            "last_learning_rate": self.coordinator.data.last_learning_rate
+            "last_learning_rate": self.coordinator.data.last_learning_rate or self.coordinator.data.heating_rate
         }
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -130,7 +130,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
             {ATTR_ENTITY_ID: self.coordinator.tado_climate_entity, ATTR_HVAC_MODE: tado_mode},
             blocking=False,
         )
-        # Sofortige Spiegelung für UI-Stabilität
+        # Forcing UI-stability
         self.coordinator.data.hvac_mode = tado_mode
         await self.coordinator.async_request_refresh()
 
