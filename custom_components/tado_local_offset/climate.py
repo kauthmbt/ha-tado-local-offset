@@ -41,6 +41,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
     """Virtual climate entity for Tado Local Offset."""
 
     _attr_has_entity_name = True
+    _attr_translation_key = "tado_local_offset"
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_precision = 0.1  # Added to ensure correct decimal display in UI
@@ -114,10 +115,10 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
             return {}
             
         return {
-            "preheat_order_target": self.coordinator.data.preheat_order_target,
-            "next_preheat_start": self.coordinator.data.next_preheat_start,
-            "preheat_minutes": self.coordinator.data.preheat_minutes,
-            "last_learning_rate": self.coordinator.data.last_learning_rate or self.coordinator.data.heating_rate
+            "preheat_order_target": self.coordinator.data.preheat_order_target or "-",
+            "next_preheat_start": self.coordinator.data.next_preheat_start or "-",
+            "preheat_minutes": self.coordinator.data.preheat_minutes or 0,
+            "last_learning_rate": self.coordinator.data.last_learning_rate or self.coordinator.data.heating_rate or "-"
         }
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:

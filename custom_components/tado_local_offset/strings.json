@@ -9,26 +9,42 @@
           "external_temp_sensor": "External sensor"
         }
       },
-      "window_detection": {
-        "title": "Window Detection",
+      "sensors": {
+        "title": "Sensor Mapping",
         "data": {
-          "enable_window_detection": "Enable window detection",
-          "window_sensor": "Window sensor",
-          "enable_temp_drop_detection": "Enable drop detection",
-          "temp_drop_threshold": "Threshold"
+          "tado_climate_entity": "Climate Entity",
+          "tado_temp_sensor": "Internal Sensor",
+          "tado_humidity_sensor": "Humidity Sensor"
         }
-      },
-      "advanced_settings": {
-        "title": "Advanced Settings",
-        "data": {
-          "enable_battery_saver": "Battery saver",
-          "tolerance": "Tolerance",
-          "backoff_minutes": "Backoff",
-          "enable_preheat": "Enable pre-heat",
-          "learning_buffer": "Learning buffer",
-          "min_preheat_minutes": "Min pre-heat",
-          "max_preheat_minutes": "Max pre-heat"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "tado_local_offset": {
+        "state_attributes": {
+          "preheat_order_target": { "name": "Preheat Target Temp" },
+          "next_preheat_start": { "name": "Next Preheat Start" },
+          "preheat_minutes": { "name": "Preheat Minutes" },
+          "last_learning_rate": { "name": "Last Learning Rate" }
         }
+      }
+    },
+    "sensor": {
+      "temperature_offset": { "name": "Temperature Offset" },
+      "heating_rate": { "name": "Heating Rate" },
+      "preheat_time": { "name": "Pre-heat Time" },
+      "compensated_target": { "name": "Compensated Target" },
+      "last_compensation": { "name": "Last Compensation" },
+      "next_preheat": { "name": "Next Pre-heat Start" }
+    }
+  },
+  "services": {
+    "set_preheat": {
+      "name": "Plan Preheat",
+      "fields": {
+        "target_time": { "name": "Target Time" },
+        "target_temp": { "name": "Target Temp" }
       }
     }
   }

@@ -32,17 +32,20 @@ class TadoLocalOffsetSensorDescription(SensorEntityDescription):
 SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
     TadoLocalOffsetSensorDescription(
         key="temperature_offset",
-        name="Temperature Offset",
+        translation_key="temperature_offset",
+        name=None,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         suggested_display_precision=2,
-        icon="mdi:thermometer-plus",
+        icon="mdi:thermostat-cog",
+        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.offset,
     ),
     TadoLocalOffsetSensorDescription(
         key="heating_rate",
-        name="Heating Rate",
+        translation_key="heating_rate",
+        name=None,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=f"{UnitOfTemperature.CELSIUS}/h",
         suggested_display_precision=3,
@@ -52,7 +55,8 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
     ),
     TadoLocalOffsetSensorDescription(
         key="preheat_time",
-        name="Pre-heat Time",
+        translation_key="preheat_time",
+        name=None,
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         icon="mdi:clock-start",
@@ -61,7 +65,8 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
     ),
     TadoLocalOffsetSensorDescription(
         key="compensated_target",
-        name="Compensated Target",
+        translation_key="compensated_target",
+        name=None,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -73,7 +78,8 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
     ),
     TadoLocalOffsetSensorDescription(
         key="last_compensation",
-        name="Last Compensation",
+        translation_key="last_compensation",
+        name=None,
         device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock-check",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -82,8 +88,10 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
     ),
     TadoLocalOffsetSensorDescription(
         key="next_preheat",
-        name="Next Pre-heat Start",
+        translation_key="next_preheat",
+        name=None,
         device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:calendar-clock",
         value_fn=lambda data: data.next_preheat_start,
     ),
 )
