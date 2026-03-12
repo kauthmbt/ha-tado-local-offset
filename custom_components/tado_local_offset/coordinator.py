@@ -326,6 +326,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     self.data.preheat_minutes = preheat_mins
                     start_time = target_dt - timedelta(minutes=preheat_mins)
                     self.data.next_preheat_start = start_time
+                    self.data.preheat_order_target = self.data.target_temperature # THIS ATRRIBUTE
 
                     # --- STATE DECISION (THE RESET FIX) ---
 
