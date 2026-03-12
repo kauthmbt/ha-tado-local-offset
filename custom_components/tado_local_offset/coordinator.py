@@ -326,6 +326,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     self.data.preheat_minutes = preheat_mins
                     start_time = target_dt - timedelta(minutes=preheat_mins)
                     self.data.next_preheat_start = start_time
+                    self.data.preheat_order_target = self.data.target_temperature # THIS ATRRIBUTE
+
 
                     # --- STATE DECISION (THE RESET FIX) ---
 
@@ -336,6 +338,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         self.data.target_time = None  # The Fix: Clears the order
                         self.data.next_preheat_start = None
                         self.data.target_temperature = 0
+                        self.data.preheat_order_target = None
                     
                     # CASE B: Within window -> ACTIVATE
                     elif now >= start_time:

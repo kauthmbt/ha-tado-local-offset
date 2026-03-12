@@ -60,6 +60,14 @@
           "last_learning_rate": { "name": "Letzte Lernrate" }
         }
       }
+    },  
+  "sensor": {
+      "temperature_offset": { "name": "Temperatur-Offset" },
+      "heating_rate": { "name": "Heizrate" },
+      "preheat_time": { "name": "Vorheiz-Dauer" },
+      "compensated_target": { "name": "Kompensiertes Ziel" },
+      "last_compensation": { "name": "Letzte Korrektur" },
+      "next_preheat": { "name": "Nächster Vorheiz-Start" }
     }
   },
   "options": {
