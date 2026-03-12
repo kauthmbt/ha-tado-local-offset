@@ -27,10 +27,18 @@
         "state_attributes": {
           "preheat_order_target": { "name": "Preheat Target Temp" },
           "next_preheat_start": { "name": "Next Preheat Start" },
-          "preheat_minutes": { "name": "Preheat Minutes" },
+          "preheat_minutes": { "name": "Preheat Duration (min)" },
           "last_learning_rate": { "name": "Last Learning Rate" }
         }
       }
+    },
+    "sensor": {
+      "temperature_offset": { "name": "Temperature Offset" },
+      "heating_rate": { "name": "Heating Rate" },
+      "preheat_time": { "name": "Preheat Duration" },
+      "compensated_target": { "name": "Compensated Target" },
+      "last_compensation": { "name": "Last Correction" },
+      "next_preheat": { "name": "Next Preheat Start" }
     }
   },
   "options": {
