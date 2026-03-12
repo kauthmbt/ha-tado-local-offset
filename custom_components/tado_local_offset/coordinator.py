@@ -77,20 +77,26 @@ class TadoLocalOffsetData:
     hvac_action: str = "idle"
     window_open: bool = False
     heating_rate: float = DEFAULT_HEATING_RATE
+    
+    # Combined preheat attributes (no duplicates)
     preheat_minutes: int = 0
+    is_preheating: bool = False
+    preheat_order_target: float | None = None
+    last_learning_rate: float | None = None
+    
     compensation_enabled: bool = True
     battery_saver_enabled: bool = True
     window_override: bool = False
     target_time: Any | None = None
     target_temperature: float = 0.0
-    is_preheating: bool = False
+    
     # This is a special marker for Python 3.13.
     _: KW_ONLY 
     
     last_update: datetime = field(default_factory=dt_util.utcnow)
     heating_history: list[Any] = field(default_factory=list)
+    # Using datetime for the timestamp as it's more robust
     next_preheat_start: datetime | None = field(default=None)
-
 
 class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     """Class to manage fetching Tado Local Offset data."""

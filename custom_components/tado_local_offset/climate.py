@@ -41,18 +41,27 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
     """Virtual climate entity for Tado Local Offset."""
 
     _attr_has_entity_name = True
+    _attr_translation_key = "tado_local_offset"
     _attr_name = None
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_precision = 0.1  # Added to ensure correct decimal display in UI
+    
+    # Define supported features for modern HA versions
     _attr_supported_features = (
-        ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TURN_OFF | ClimateEntityFeature.TURN_ON
+        ClimateEntityFeature.TARGET_TEMPERATURE 
+        | ClimateEntityFeature.TURN_OFF 
+        | ClimateEntityFeature.TURN_ON
     )
 
     def __init__(self, coordinator: TadoLocalOffsetCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the climate entity."""
         super().__init__(coordinator)
-        # Eindeutige ID mit Raumnamen zur Vermeidung von Registry-Konflikten
+        # Use a safe slug for the unique ID
         room_slug = str(coordinator.room_name).lower().replace(" ", "_")
         self._attr_unique_id = f"{entry.entry_id}_{room_slug}_climate"
-        self._room_name = entry.data[CONF_ROOM_NAME]
+        
+        # SAFE ACCESS: Use .get() to avoid KeyError during initialization
+        self._room_name = entry.data.get(CONF_ROOM_NAME, coordinator.room_name)
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -64,29 +73,53 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         self._attr_min_temp = MIN_TEMP
         self._attr_max_temp = MAX_TEMP
         self._attr_target_temperature_step = 0.5
+        self._attr_precision = 0.1 # Crucial for UI and internal float handling
 
     @property
     def current_temperature(self) -> float | None:
+        """Return the current external temperature."""
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.external_temp
 
     @property
     def target_temperature(self) -> float | None:
+        """Return the desired target temperature."""
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.desired_temp
 
     @property
     def hvac_mode(self) -> HVACMode:
-        """Gibt den Modus zurück - Zwingt HEAT solange nicht OFF gemeldet wird."""
-        if self.coordinator.data.hvac_mode == "off":
+        """Return current hvac mode - defaults to HEAT unless OFF is reported."""
+        if not self.coordinator.data or self.coordinator.data.hvac_mode == "off":
             return HVACMode.OFF
         return HVACMode.HEAT
 
     @property
     def hvac_modes(self) -> list[HVACMode]:
+        """Return the list of supported hvac operation modes."""
         return [HVACMode.HEAT, HVACMode.OFF]
 
     @property
     def hvac_action(self) -> str | None:
+        """Return the current running hvac action."""
+        if not self.coordinator.data:
+            return None
         return self.coordinator.data.hvac_action
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return entity specific state attributes for analysis."""
+        if not self.coordinator.data:
+            return {}
+            
+        return {
+            "preheat_order_target": self.coordinator.data.preheat_order_target or "-",
+            "next_preheat_start": self.coordinator.data.next_preheat_start or "-",
+            "preheat_minutes": self.coordinator.data.preheat_minutes or 0,
+            "last_learning_rate": self.coordinator.data.last_learning_rate or self.coordinator.data.heating_rate or "-"
+        }
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode - proxy to real Tado."""
@@ -98,7 +131,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
             {ATTR_ENTITY_ID: self.coordinator.tado_climate_entity, ATTR_HVAC_MODE: tado_mode},
             blocking=False,
         )
-        # Sofortige Spiegelung für UI-Stabilität
+        # Forcing UI-stability
         self.coordinator.data.hvac_mode = tado_mode
         await self.coordinator.async_request_refresh()
 
