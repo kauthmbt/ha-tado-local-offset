@@ -2,11 +2,13 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add Tado Local Offset Room",
+        "title": "Tado Local Offset Configuration",
+        "description": "Configure the integration for local Tado offsets and preheating.",
         "data": {
           "room_name": "Room name",
           "tado_device": "Tado device",
-          "external_temp_sensor": "External sensor"
+          "external_temp_sensor": "External sensor",
+          "scan_interval": "Update Interval (seconds)"
         }
       },
       "sensors": {
@@ -36,7 +38,12 @@
       "preheat_time": { "name": "Pre-heat Time" },
       "compensated_target": { "name": "Compensated Target" },
       "last_compensation": { "name": "Last Compensation" },
-      "next_preheat": { "name": "Next Pre-heat Start" }
+      "next_preheat": { "name": "Next Pre-heat Start" },
+      "next_preheat_start": { "name": "Next preheat start" },
+      "preheat_order_target": { "name": "Preheat order target" }
+    },
+    "binary_sensor": {
+      "preheating": { "name": "Preheating" }
     }
   },
   "services": {

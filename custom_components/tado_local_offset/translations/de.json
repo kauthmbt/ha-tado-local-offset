@@ -1,4 +1,5 @@
 {
+  "title": "Tado Local Offset",
   "config": {
     "step": {
       "user": {
@@ -7,7 +8,8 @@
         "data": {
           "room_name": "Raumname",
           "tado_device": "Tado Thermostat (HomeKit)",
-          "external_temp_sensor": "Externer Temperatursensor"
+          "external_temp_sensor": "Externer Temperatursensor",
+          "scan_interval": "Update-Intervall (Sekunden)"
         },
         "data_description": {
           "room_name": "Z.B. 'Wohnzimmer' oder 'Jugendzimmer'",
@@ -60,6 +62,11 @@
           "last_learning_rate": { "name": "Letzte Lernrate" }
         }
       }
+    },
+  "binary_sensor": {
+      "preheating": {
+        "name": "Vorheizen"
+      }
     },  
   "sensor": {
       "temperature_offset": { "name": "Temperatur-Offset" },
@@ -67,7 +74,9 @@
       "preheat_time": { "name": "Vorheiz-Dauer" },
       "compensated_target": { "name": "Kompensiertes Ziel" },
       "last_compensation": { "name": "Letzte Korrektur" },
-      "next_preheat": { "name": "Nächster Vorheiz-Start" }
+      "next_preheat": { "name": "Nächster Vorheiz-Start" },
+      "next_preheat_start": { "name": "Nächster Heizbeginn" },
+      "preheat_order_target": { "name": "Vorheiz-Zieltemperatur" }
     }
   },
   "options": {
