@@ -79,14 +79,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_force_compensation(call: ServiceCall) -> None:
         """Erzwingt ein Update für die gewählten Entitäten."""
         for coordinator in get_coordinators_from_call(call):
-            _LOGGER.info("Forcing compensation for %s", coordinator.room_name)
+            _LOGGER.debug("Forcing compensation for %s", coordinator.room_name)
             await coordinator.async_force_compensation()
             await coordinator.async_request_refresh()
 
     async def handle_reset_learning(call: ServiceCall) -> None:
         """Löscht die Historie gezielt für die gewählten Entitäten."""
         for coordinator in get_coordinators_from_call(call):
-            _LOGGER.warning("Resetting learning for %s", coordinator.room_name)
+            _LOGGER.info("Resetting learning for %s", coordinator.room_name)
             await coordinator.async_reset_learning()
             await coordinator.async_request_refresh()
 
