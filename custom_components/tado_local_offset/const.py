@@ -27,6 +27,7 @@ CONF_LEARNING_BUFFER: Final = "learning_buffer"
 CONF_MIN_PREHEAT_MINUTES: Final = "min_preheat_minutes"
 CONF_MAX_PREHEAT_MINUTES: Final = "max_preheat_minutes"
 CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay"
+CONF_SOLAR_SENSOR: Final = "solar_sensor"
 
 # Default values
 DEFAULT_TEMP_DROP_THRESHOLD: Final = 1.0

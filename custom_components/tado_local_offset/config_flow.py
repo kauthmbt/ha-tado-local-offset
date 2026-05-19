@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_BACKOFF_MINUTES, CONF_ENABLE_BATTERY_SAVER, CONF_ENABLE_PREHEAT,
+    CONF_BACKOFF_MINUTES, CONF_ENABLE_BATTERY_SAVER, CONF_ENABLE_PREHEAT, CONF_SOLAR_SENSOR,
     CONF_ENABLE_TEMP_DROP_DETECTION, CONF_ENABLE_WINDOW_DETECTION,
     CONF_EXTERNAL_TEMP_SENSOR, CONF_LEARNING_BUFFER, CONF_MAX_PREHEAT_MINUTES,
     CONF_MIN_PREHEAT_MINUTES, CONF_ROOM_NAME, CONF_TADO_CLIMATE_ENTITY,
@@ -95,6 +95,10 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_TADO_HUMIDITY_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
+                # DAS HIER FÜR DIE PREDICTIVE LOGIK:
+                vol.Optional("solar_sensor"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor") # Dein Solar-Sensor
+                ),
             }),
         )
     @staticmethod
@@ -168,6 +172,12 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="advanced_settings",
             data_schema=vol.Schema({
+                vol.Optional(
+                    CONF_SOLAR_SENSOR, 
+                    default=self.options.get(CONF_SOLAR_SENSOR, "")
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor")
+                ),
                 vol.Optional(CONF_ENABLE_PREHEAT, default=self.options.get(CONF_ENABLE_PREHEAT, False)): bool,
                 vol.Optional(CONF_LEARNING_BUFFER, default=self.options.get(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): vol.All(
                     vol.Coerce(int), vol.Range(min=0, max=50)

@@ -41,6 +41,7 @@ from .const import (
     CONF_TEMP_DROP_THRESHOLD,
     CONF_TOLERANCE,
     CONF_WINDOW_SENSOR,
+    CONF_SOLAR_SENSOR,
     DEFAULT_DESIRED_TEMP,
     DEFAULT_HEATING_RATE,
     DOMAIN,
@@ -106,6 +107,13 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
         self._last_reported_mins = -1 # Initial value that ensures that an update is performed the first time
 
+        # --- DIESE ZEILEN HIER HINZUFÜGEN ---
+        self._kalman_x: float | None = None  # Gefilterter Zustand
+        self._kalman_p: float = 1.0          # Schätzfehler-Trägheit
+        self._kalman_q: float = 0.02         # Prozess-Rauschen (Wie schnell ändert sich Raumtemp. real?)
+        self._kalman_r: float = 0.15         # Sensor-Rauschen (Wie stark "zappelt" der Sensor?)
+        # ------------------------------------
+        
         super().__init__(
             hass,
             _LOGGER,
@@ -182,6 +190,26 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             CONF_ENABLE_WINDOW_DETECTION,
             entry.data.get(CONF_ENABLE_WINDOW_DETECTION, False)
         )
+
+    def _filter_temperature(self, measurement: float) -> float:
+        """Schützt vor Sensorsprüngen mittels Kalman-Filterung."""
+        if self._kalman_x is None:
+            self._kalman_x = measurement
+            return measurement
+            
+        # 1. Vorhersage-Update
+        self._kalman_p = self._kalman_p + self._kalman_q
+        
+        # 2. Kalman-Gain berechnen
+        kalman_gain = self._kalman_p / (self._kalman_p + self._kalman_r)
+        
+        # 3. Schätzung aktualisieren
+        self._kalman_x = self._kalman_x + kalman_gain * (measurement - self._kalman_x)
+        
+        # 4. Schätzfehler aktualisieren
+        self._kalman_p = (1.0 - kalman_gain) * self._kalman_p
+        
+        return self._kalman_x
         
     async def _async_update_data(self) -> TadoLocalOffsetData:
         """Fetch data from sensors and calculate compensation."""
@@ -222,18 +250,42 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                                     self.room_name, tado_temp, external_temp)
                     return self.data
 
-                self.data.external_temp = external_temp
+                # 1. Externen Sensor durch den Kalman-Filter jagen
+                filtered_external_temp = self._filter_temperature(external_temp)
+                
+                # 2. Prädiktiven Solar-Faktor berechnen (MPC-Ansatz)
+                solar_modifier = 0.0
+                solar_entity_id = self.entry.options.get(CONF_SOLAR_SENSOR) or self.entry.data.get(CONF_SOLAR_SENSOR)
+                
+                if solar_entity_id:
+                    solar_state = self.hass.states.get(solar_entity_id)
+                    if solar_state and solar_state.state not in ("unknown", "unavailable"):
+                        try:
+                            solar_watt = float(solar_state.state)
+                            # Jede 100 W/m² verringern den Offset proaktiv um 0,05°C
+                            solar_modifier = solar_watt * 0.0005 
+                        except ValueError:
+                            _LOGGER.warning("[%s] Solar sensor state is not a valid number: %s", self.room_name, solar_state.state)
+
+                # 3. Werte im Daten-Objekt speichern (Jetzt gefiltert!)
+                self.data.external_temp = filtered_external_temp
                 self.data.tado_temp = tado_temp
-                _LOGGER.info("[%s] Temperatures updated for Tado %s (External %s)", 
-                             self.room_name, tado_temp, external_temp)
+                
+                # 4. Den finalen Offset direkt hier berechnen (inklusive Solar-Vorrang für EG/OG)
+                # Keller: solar_modifier ist 0.0 -> normale Differenz
+                # EG/OG: Zieht den Solarwert ab, Tado schließt das Ventil früher
+                self.data.offset = filtered_external_temp - tado_temp + solar_modifier
+                
+                _LOGGER.info(
+                    "[%s] Temps updated. External (Filtered): %.2f°C, Solar-Mod: %.2f°C, Final Offset: %.2f", 
+                    self.room_name, filtered_external_temp, solar_modifier, self.data.offset
+                )
                     
             except (ValueError, TypeError) as err:
                 _LOGGER.error("Error parsing temperature for %s: %s", self.room_name, err)
                 return self.data
 
             # Update data
-            self.data.external_temp = external_temp
-            self.data.tado_temp = tado_temp
             self.data.tado_target = float(tado_climate_state.attributes.get("temperature", DEFAULT_DESIRED_TEMP))
             raw_state = str(tado_climate_state.state).lower()
             
@@ -260,7 +312,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 self._heating_start_time = None
                 self._heating_start_temp = None
             # Calculate offset
-            self.data.offset = external_temp - tado_temp
+            #self.data.offset = external_temp - tado_temp
 
             # Detect external target temperature changes (schedules, manual, app)
             # and sync back to desired_temp before compensation runs
