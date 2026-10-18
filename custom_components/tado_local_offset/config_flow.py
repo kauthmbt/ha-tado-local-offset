@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_BACKOFF_MINUTES, CONF_ENABLE_BATTERY_SAVER, CONF_ENABLE_PREHEAT,
+    CONF_BACKOFF_MINUTES, CONF_ENABLE_BATTERY_SAVER, CONF_ENABLE_PREHEAT, CONF_SOLAR_SENSOR,
     CONF_ENABLE_TEMP_DROP_DETECTION, CONF_ENABLE_WINDOW_DETECTION,
     CONF_EXTERNAL_TEMP_SENSOR, CONF_LEARNING_BUFFER, CONF_MAX_PREHEAT_MINUTES,
     CONF_MIN_PREHEAT_MINUTES, CONF_ROOM_NAME, CONF_TADO_CLIMATE_ENTITY,
@@ -95,6 +95,10 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_TADO_HUMIDITY_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
+                # DAS HIER FÜR DIE PREDICTIVE LOGIK:
+                vol.Optional("solar_sensor"): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor") # Dein Solar-Sensor
+                ),
             }),
         )
     @staticmethod
@@ -162,21 +166,40 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_advanced_settings(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Advanced and Preheat settings."""
         if user_input is not None:
+            # If the field was left blank, delete it or save it as is
+            if CONF_SOLAR_SENSOR in user_input and not user_input[CONF_SOLAR_SENSOR]:
+                user_input[CONF_SOLAR_SENSOR] = None
             self.options.update(user_input)
             return self.async_create_entry(title="", data=self.options)
 
+        # Determine the correct default value (None instead of “”)
+        current_solar = self.options.get(CONF_SOLAR_SENSOR)
+        solar_default = current_solar if current_solar else vol.UNDEFINED
+
+        schema = {
+            vol.Optional(CONF_ENABLE_PREHEAT, default=self.options.get(CONF_ENABLE_PREHEAT, False)): bool,
+            vol.Optional(CONF_LEARNING_BUFFER, default=self.options.get(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): vol.All(
+                vol.Coerce(int), vol.Range(min=0, max=50)
+            ),
+            vol.Optional(CONF_MIN_PREHEAT_MINUTES, default=self.options.get(CONF_MIN_PREHEAT_MINUTES, DEFAULT_MIN_PREHEAT_MINUTES)): vol.All(
+                vol.Coerce(int), vol.Range(min=5, max=60)
+            ),
+            vol.Optional(CONF_MAX_PREHEAT_MINUTES, default=self.options.get(CONF_MAX_PREHEAT_MINUTES, DEFAULT_MAX_PREHEAT_MINUTES)): vol.All(
+                vol.Coerce(int), vol.Range(min=30, max=240)
+            ),
+        }
+
+        # Only set a default if an entity is actually stored!
+        if current_solar:
+            schema[vol.Optional(CONF_SOLAR_SENSOR, default=current_solar)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[vol.Optional(CONF_SOLAR_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
         return self.async_show_form(
             step_id="advanced_settings",
-            data_schema=vol.Schema({
-                vol.Optional(CONF_ENABLE_PREHEAT, default=self.options.get(CONF_ENABLE_PREHEAT, False)): bool,
-                vol.Optional(CONF_LEARNING_BUFFER, default=self.options.get(CONF_LEARNING_BUFFER, DEFAULT_LEARNING_BUFFER)): vol.All(
-                    vol.Coerce(int), vol.Range(min=0, max=50)
-                ),
-                vol.Optional(CONF_MIN_PREHEAT_MINUTES, default=self.options.get(CONF_MIN_PREHEAT_MINUTES, DEFAULT_MIN_PREHEAT_MINUTES)): vol.All(
-                    vol.Coerce(int), vol.Range(min=5, max=60)
-                ),
-                vol.Optional(CONF_MAX_PREHEAT_MINUTES, default=self.options.get(CONF_MAX_PREHEAT_MINUTES, DEFAULT_MAX_PREHEAT_MINUTES)): vol.All(
-                    vol.Coerce(int), vol.Range(min=30, max=240)
-                ),
-            }),
+            data_schema=vol.Schema(schema),
         )

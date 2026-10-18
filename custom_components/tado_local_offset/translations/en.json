@@ -14,7 +14,8 @@
         "data": {
           "tado_climate_entity": "Climate Entity",
           "tado_temp_sensor": "Internal Sensor",
-          "tado_humidity_sensor": "Humidity Sensor"
+          "tado_humidity_sensor": "Humidity Sensor",
+		  "solar_sensor": "Solar Sensor (Predictive)"
         }
       },
       "window_detection": { "title": "3. Window Detection" },
@@ -45,7 +46,10 @@
     "step": {
       "general_settings": { "title": "General Settings" },
       "window_detection": { "title": "Window Detection" },
-      "advanced_settings": { "title": "Advanced & Preheat" }
+      "advanced_settings": { "title": "Advanced & Preheat" },
+		"data": {
+          "solar_sensor": "Solar Sensor (Predictive)"
+        }
     }
   }
 }

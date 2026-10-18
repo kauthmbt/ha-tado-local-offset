@@ -44,6 +44,7 @@
           "tolerance": "Temperatur-Toleranz (°C)",
           "backoff_minutes": "Wartezeit (Minuten)",
           "enable_battery_saver": "Batteriesparmodus",
+		  "solar_sensor": "Solar-Sensor (Proaktiv)",
           "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit (Min)",
@@ -63,12 +64,18 @@
         }
       }
     },
-  "binary_sensor": {
-      "preheating": {
-        "name": "Vorheizen"
-      }
+    "binary_sensor": {
+      "preheating": { "name": "Vorheizen" },
+      "window_open": { "name": "Fenster offen" }
+    },
+    "number": {
+      "learning_buffer": { "name": "Lern-Puffer" },
+      "min_preheat_minutes": { "name": "Minimale Vorheizzeit" },
+      "max_preheat_minutes": { "name": "Maximale Vorheizzeit" },
+      "temp_drop_threshold": { "name": "Temperaturabfall-Limit" },
+      "window_open_delay": { "name": "Fenster-Offen-Verzögerung" }
     },  
-  "sensor": {
+    "sensor": {
       "temperature_offset": { "name": "Temperatur-Offset" },
       "heating_rate": { "name": "Heizrate" },
       "preheat_time": { "name": "Vorheiz-Dauer" },
@@ -105,7 +112,8 @@
         "title": "Erweiterte Einstellungen & Vorheizen",
         "description": "Lernfunktion und Puffer-Zeiten.",
         "data": {
-          "enable_preheat": "Vorheizen (Lernfunktion)",
+          "solar_sensor": "Solar-Sensor (Proaktiv)",
+		  "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit (Min)",
           "max_preheat_minutes": "Max. Vorheizzeit (Min)"
