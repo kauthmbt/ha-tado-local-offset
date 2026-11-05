@@ -45,7 +45,7 @@ SERVICE_SET_PREHEAT_SCHEMA = vol.Schema({
     vol.Required(ATTR_TARGET_TEMPERATURE): vol.Coerce(float),
 })
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Set up Tado Local Offset from a config entry."""
     coordinator = TadoLocalOffsetCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
@@ -120,15 +120,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_SET_PREHEAT, handle_set_preheat, schema=SERVICE_SET_PREHEAT_SCHEMA)
 
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-    return True
+
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry when options are updated."""
     await hass.config_entries.async_reload(entry.entry_id)
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-    return unload_ok
