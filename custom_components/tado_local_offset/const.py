@@ -28,6 +28,7 @@ CONF_MIN_PREHEAT_MINUTES: Final = "min_preheat_minutes"
 CONF_MAX_PREHEAT_MINUTES: Final = "max_preheat_minutes"
 CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay"
 CONF_SOLAR_SENSOR: Final = "solar_sensor"
+CONF_MAX_HEATING_CYCLES: Final = "max_heating_cycles"
 
 # Default values
 DEFAULT_TEMP_DROP_THRESHOLD: Final = 1.0
@@ -39,6 +40,7 @@ DEFAULT_MAX_PREHEAT_MINUTES: Final = 120
 DEFAULT_DESIRED_TEMP: Final = 20.0
 DEFAULT_HEATING_RATE: Final = 0.5  # °C per hour
 DEFAULT_WINDOW_OPEN_DELAY: Final = 120
+DEFAULT_MAX_HEATING_CYCLES: Final = 20
 
 # Update intervals
 UPDATE_INTERVAL: Final = timedelta(seconds=30)
@@ -54,7 +56,7 @@ MAX_BACKOFF: Final = 60
 MAX_OFFSET: Final = 5.0  # Maximum allowed offset to prevent invalid targets
 MIN_HEATING_RATE: Final = 0.1
 MAX_HEATING_RATE: Final = 5
-MAX_HEATING_CYCLES: Final = 20  # Keep last 20 cycles for learning
+MAX_HEATING_CYCLES: Final = 20  # Keep max last 20 cycles for learning
 
 # Temperature drop detection
 TEMP_DROP_WINDOW_MINUTES: Final = 5
