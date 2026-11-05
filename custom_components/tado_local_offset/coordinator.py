@@ -42,8 +42,10 @@ from .const import (
     CONF_TOLERANCE,
     CONF_WINDOW_SENSOR,
     CONF_SOLAR_SENSOR,
+    CONF_MAX_HEATING_CYCLES,
     DEFAULT_DESIRED_TEMP,
     DEFAULT_HEATING_RATE,
+    DEFAULT_MAX_HEATING_CYCLES,
     DOMAIN,
     MAX_HEATING_CYCLES,
     MAX_HEATING_RATE,
@@ -143,7 +145,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.backoff_minutes = entry.options.get(CONF_BACKOFF_MINUTES, entry.data.get(CONF_BACKOFF_MINUTES, 15))
         self.min_preheat_minutes = entry.options.get(CONF_MIN_PREHEAT_MINUTES, entry.data.get(CONF_MIN_PREHEAT_MINUTES, 15))
         self.max_preheat_minutes = entry.options.get(CONF_MAX_PREHEAT_MINUTES, entry.data.get(CONF_MAX_PREHEAT_MINUTES, 120))
-        
+        self.max_heating_cycles = entry.options.get(CONF_MAX_HEATING_CYCLES, entry.data.get(CONF_MAX_HEATING_CYCLES, DEFAULT_MAX_HEATING_CYCLES))
+
         # Boolean Values 
         self.enable_temp_drop_detection = entry.options.get(CONF_ENABLE_TEMP_DROP_DETECTION, entry.data.get(CONF_ENABLE_TEMP_DROP_DETECTION, False))
         self.enable_preheat = entry.options.get(CONF_ENABLE_PREHEAT, entry.data.get(CONF_ENABLE_PREHEAT, False))
@@ -166,10 +169,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # Initialize data
         self.data = TadoLocalOffsetData()
+
         self.data.battery_saver_enabled = entry.options.get(
             CONF_ENABLE_BATTERY_SAVER, 
             entry.data.get(CONF_ENABLE_BATTERY_SAVER, True)
         )
+
         # --- Window-Sensor ---
         conf_window = entry.options.get(
             CONF_WINDOW_SENSOR, 
@@ -778,7 +783,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # 4. SAVE DATA (just one time!)
         self.data.heating_history.append(instant_rate)
         
-        if len(self.data.heating_history) > MAX_HEATING_CYCLES:
+        if len(self.data.heating_history) > self.max_heating_cycles:
             self.data.heating_history.pop(0)
 
         self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)

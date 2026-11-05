@@ -15,7 +15,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_ROOM_NAME,
+    CONF_MAX_HEATING_CYCLES,
     DEFAULT_DESIRED_TEMP,
+    DEFAULT_MAX_HEATING_CYCLES,
     DOMAIN,
     MANUFACTURER,
     MAX_BACKOFF,
@@ -72,6 +74,17 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.MINUTES,
         set_fn=lambda coord, value: setattr(coord, "backoff_minutes", int(value)),
         get_fn=lambda coord: float(coord.backoff_minutes),
+    ),
+    TadoLocalOffsetNumberDescription(
+        key="max_heating_cycles",
+        name="Max Heating Cycles",
+        icon="mdi:counter",
+        entity_category=EntityCategory.CONFIG,
+        native_min_value=5,
+        native_max_value=50,
+        native_step=1,
+        set_fn=lambda coord, value: setattr(coord, "max_heating_cycles", int(value)),
+        get_fn=lambda coord: float(coord.max_heating_cycles),
     ),
 )
 
