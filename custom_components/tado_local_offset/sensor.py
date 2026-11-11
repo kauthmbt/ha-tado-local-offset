@@ -87,6 +87,17 @@ SENSORS: tuple[TadoLocalOffsetSensorDescription, ...] = (
         value_fn=lambda data: data.last_update,
     ),
     TadoLocalOffsetSensorDescription(
+        key="cooling_rate",
+        translation_key="cooling_rate",
+        name=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=f"{UnitOfTemperature.CELSIUS}/h",
+        suggested_display_precision=3,
+        icon="mdi:thermometer-minus",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.cooling_rate,
+    ),
+    TadoLocalOffsetSensorDescription(
         key="next_preheat",
         translation_key="next_preheat",
         name=None,

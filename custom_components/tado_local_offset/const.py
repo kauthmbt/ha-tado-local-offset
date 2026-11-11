@@ -2,11 +2,19 @@
 from datetime import timedelta
 from typing import Final
 
+from homeassistant.const import Platform 
+
 # Integration domain
 DOMAIN: Final = "tado_local_offset"
 
 # Platforms
-PLATFORMS: Final = ["climate", "sensor", "binary_sensor", "number", "switch"]
+PLATFORMS: Final = [
+    Platform.CLIMATE,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SWITCH,
+]
 
 # Configuration keys
 CONF_ROOM_NAME: Final = "room_name"
@@ -28,7 +36,7 @@ CONF_MIN_PREHEAT_MINUTES: Final = "min_preheat_minutes"
 CONF_MAX_PREHEAT_MINUTES: Final = "max_preheat_minutes"
 CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay"
 CONF_SOLAR_SENSOR: Final = "solar_sensor"
-CONF_WEATHER_SENSOR = "weather_sensor"
+CONF_WEATHER_SENSOR: Final = "weather_sensor"
 CONF_OUTSIDE_TEMP_SENSOR: Final = "outside_temp_sensor"
 CONF_MAX_HEATING_CYCLES: Final = "max_heating_cycles"
 
@@ -42,7 +50,7 @@ DEFAULT_MAX_PREHEAT_MINUTES: Final = 120
 DEFAULT_DESIRED_TEMP: Final = 20.0
 DEFAULT_HEATING_RATE: Final = 0.5  # °C per hour
 DEFAULT_WINDOW_OPEN_DELAY: Final = 120
-DEFAULT_MAX_HEATING_CYCLES: Final = 20
+DEFAULT_MAX_HEATING_CYCLES: Final = 10
 
 # Update intervals
 UPDATE_INTERVAL: Final = timedelta(seconds=30)
@@ -59,6 +67,12 @@ MAX_OFFSET: Final = 5.0  # Maximum allowed offset to prevent invalid targets
 MIN_HEATING_RATE: Final = 0.1
 MAX_HEATING_RATE: Final = 2
 MAX_HEATING_CYCLES: Final = 20  # Keep max last 20 cycles for learning
+
+# Cooling rate learning
+DEFAULT_COOLING_RATE: Final = 0.15    # °C per hour (initial value; will be overwritten once the system has learnt the setting)
+MAX_COOLING_RATE: Final = 1.0         # Faster drop = ventilation, no loss
+COOLING_MIN_DURATION_HRS: Final = 0.5 # Minimum duration of a cooling phase
+COOLING_MIN_DELTA: Final = 0.15       # Minimum drop in temperature (in °C) before a reading is recorded
 
 # Temperature drop detection
 TEMP_DROP_WINDOW_MINUTES: Final = 5
@@ -94,4 +108,4 @@ STORAGE_VERSION: Final = 1
 # Device info
 MANUFACTURER: Final = "Tado Local Offset"
 MODEL: Final = "Virtual Thermostat"
-VERSION: Final = "2026.10.4"
+VERSION: Final = "2026.11.1"

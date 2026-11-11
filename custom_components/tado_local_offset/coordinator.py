@@ -49,6 +49,7 @@ from .const import (
     DEFAULT_DESIRED_TEMP,
     DEFAULT_HEATING_RATE,
     DEFAULT_MAX_HEATING_CYCLES,
+    DEFAULT_COOLING_RATE,
     DOMAIN,
     MAX_HEATING_CYCLES,
     MAX_HEATING_RATE,
@@ -56,6 +57,9 @@ from .const import (
     MAX_TEMP,
     MIN_HEATING_RATE,
     MIN_TEMP,
+    MAX_COOLING_RATE,
+    COOLING_MIN_DURATION_HRS,
+    COOLING_MIN_DELTA,
     TEMP_DROP_RATE_THRESHOLD,
     TEMP_DROP_WINDOW_MINUTES,
     UPDATE_INTERVAL,
@@ -140,6 +144,7 @@ class TadoLocalOffsetData:
     hvac_action: str = "idle"
     window_open: bool = False
     heating_rate: float = DEFAULT_HEATING_RATE
+    cooling_rate: float = DEFAULT_COOLING_RATE
     
     # Combined preheat attributes (no duplicates)
     preheat_minutes: int = 0
@@ -158,6 +163,7 @@ class TadoLocalOffsetData:
     
     last_update: datetime = field(default_factory=dt_util.utcnow)
     heating_history: list[Any] = field(default_factory=list)
+    cooling_history: list[Any] = field(default_factory=list)
     # Using datetime for the timestamp as it's more robust
     next_preheat_start: datetime | None = field(default=None)
 
@@ -220,6 +226,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._last_sent_compensated_target: float | None = None
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
+        self._cooling_start_time: datetime | None = None
+        self._cooling_start_temp: float | None = None
         self._heating_external_start_temp: float | None = None 
         self._temp_history: list[tuple[datetime, float]] = []
         self._is_heating = False 
@@ -418,6 +426,25 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     _LOGGER.info("[%s] Heating cycle completed. Data has been processed.", self.room_name)
                 self._heating_start_time = None
                 self._heating_start_temp = None
+
+            # --- Live Cooling Learning (mirror image of Heating) ---
+            # Cooling phases are learnt only without active heating, with the
+            # window closed and outside the stabilisation phase following ventilation.
+            now_cc = dt_util.utcnow()
+            in_calm_phase = (
+                self._window_closed_at is not None
+                and (now_cc - self._window_closed_at).total_seconds() < 15 * 60
+            )
+            if current_hvac != "heating" and not self.data.window_open and not in_calm_phase:
+                if self._cooling_start_time is None:
+                    self._cooling_start_time = now_cc
+                    self._cooling_start_temp = self.data.external_temp
+                else:
+                    self._calculate_instant_cooling_rate(self.data.external_temp)
+            else:
+                # Heizen aktiv, Fenster offen oder Ruhephase -> Zyklus verwerfen
+                self._cooling_start_time = None
+                self._cooling_start_temp = None
             # Calculate offset
             #self.data.offset = external_temp - tado_temp
 
@@ -470,7 +497,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     
                     # Calculate preheat minutes with weather forecast integrated
                     preheat_mins = await self._calculate_preheat_minutes(
-                        self.data.target_temperature if self.data.target_temperature > 0 else None
+                        self.data.target_temperature if self.data.target_temperature > 0 else None,
+                        target_dt=target_dt,
                     )
 
                     self.data.preheat_minutes = preheat_mins
@@ -639,7 +667,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
 
 
-    async def _calculate_preheat_minutes(self, target_temp: float | None = None) -> int:
+    async def _calculate_preheat_minutes(self, target_temp: float | None = None, target_dt: datetime | None = None) -> int:
         """Calculate minutes needed to reach desired temperature."""
         # 1. Relevant target temperature
         check_temp = target_temp if target_temp is not None else self.data.desired_temp
@@ -714,6 +742,21 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # Dynamic correction from the weather FORECAST (cached, shared)
         weather_factor_dynamic = await self.async_get_weather_correction_factor(minutes_raw)
+        # Take cooling loss into account during the lead-in period (fixed-point, 3 iterations).
+        # If there is no stock history, the term is skipped -> no default value.
+        cool_lead_hrs = 0.0
+        if (
+            target_dt is not None
+            and self.data.cooling_history
+            and (self.data.cooling_rate or 0.0) > 0.02
+        ):
+            for _ in range(3):
+                cool_lead_hrs = max(
+                    0.0,
+                    (target_dt - dt_util.now()).total_seconds() / 3600 - minutes_raw / 60,
+                )
+                effective_delta = room_delta + (self.data.cooling_rate or 0.0) * cool_lead_hrs
+                minutes_raw = (effective_delta / safe_heating_rate) * 60 * weather_factor
         minutes_raw *= weather_factor_dynamic
 
         buffered = minutes_raw * (1 + self.learning_buffer / 100)
@@ -727,9 +770,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         ):
             self._last_reported_mins = new_val
             _LOGGER.info(
-                "PREHEAT-ADJUST [%s]: Delta %.2f°C (Target %.1f) -> WF %.2f (out: %s) / dyn WF %.2f -> %d Min",
-                self.room_name, room_delta, check_temp, weather_factor,
-                f"{out_temp:.1f}°C" if out_temp is not None else "n/a",
+                "PREHEAT-ADJUST [%s]: Delta %.2f°C (Target %.1f, Cool +%.2f°C @ rate %.2f) -> WF %.2f (out: %s) / dyn WF %.2f -> %d Min",
+                self.room_name, room_delta, check_temp,
+                (self.data.cooling_rate or 0.0) * cool_lead_hrs,
+                self.data.cooling_rate or 0.0,
                 weather_factor_dynamic, new_val,
             )
 
@@ -853,6 +897,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.data.heating_rate = DEFAULT_HEATING_RATE
         self._heating_start_time = None
         self._heating_start_temp = None
+        self.data.cooling_history.clear()
+        self.data.cooling_rate = DEFAULT_COOLING_RATE
+        self._cooling_start_time = None
+        self._cooling_start_temp = None
         self.logger.info("Reset learning data for %s", self.room_name)
 
     def set_compensation_enabled(self, enabled: bool) -> None:
@@ -921,6 +969,40 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         return instant_rate
 
+    def _calculate_instant_cooling_rate(self, current_temp: float) -> float | None:
+        """Lernt die Abkühlrate aus Phasen ohne aktives Heizen (fallspezifisch)."""
+        if self._cooling_start_time is None or self._cooling_start_temp is None:
+            return None
+
+        duration_hrs = (dt_util.utcnow() - self._cooling_start_time).total_seconds() / 3600
+        temp_diff = self._cooling_start_temp - current_temp  # positiv = Abkühlung
+
+        # Sammelphase: Kriterien noch nicht erfüllt -> weiter beobachten
+        if duration_hrs < COOLING_MIN_DURATION_HRS or temp_diff < COOLING_MIN_DELTA:
+            return None
+
+        instant_rate = temp_diff / duration_hrs
+
+        # Plausibilisierung: schnelle Abfälle sind Lüftung/Tür, kein thermischer Verlust
+        if instant_rate > MAX_COOLING_RATE:
+            _LOGGER.debug(
+                "[%s] Cooling cycle ignored - rate %.2f°C/h exceeds max %.1f (likely ventilation)",
+                self.room_name, instant_rate, MAX_COOLING_RATE,
+            )
+            return None
+
+        self.data.cooling_history.append(instant_rate)
+        if len(self.data.cooling_history) > self.max_heating_cycles:
+            self.data.cooling_history.pop(0)
+
+        self.data.cooling_rate = sum(self.data.cooling_history) / len(self.data.cooling_history)
+        self.hass.async_create_task(self._async_save_data())
+
+        _LOGGER.info(
+            "[%s] Cooling rate learned: %.3f°C/h (cycle: %.2fh, -%.2f°C, avg of %d cycles)",
+            self.room_name, instant_rate, duration_hrs, temp_diff, len(self.data.cooling_history),
+        )
+        return instant_rate
         
     async def async_load_data(self) -> None:
         """Loads the historical heating rate from JSON storage at start-up."""
@@ -935,7 +1017,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 "Historical heating data for %s loaded. Current rate: %.4f °C/h", 
                 self.room_name, self.data.heating_rate
             )
-
+            
+        cooling_hist = (stored_data or {}).get("cooling_history")
+        if cooling_hist:
+            self.data.cooling_history = cooling_hist
+            self.data.cooling_rate = sum(cooling_hist) / len(cooling_hist)
+            _LOGGER.info(
+                "Historical cooling data for %s loaded. Current rate: %.4f °C/h",
+                self.room_name, self.data.cooling_rate,
+            )
         # --- Restore preheat order (survives restarts) ---
         if stored_data and "preheat_order" in stored_data:
             order = stored_data["preheat_order"]
@@ -972,6 +1062,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         """Saves the current history and preheat order permanently."""
         await self._store.async_save({
             "history": self.data.heating_history,
+            "cooling_history": self.data.cooling_history,
             "preheat_order": {
                 "target_time": self.data.target_time,
                 "target_temperature": self.data.target_temperature,

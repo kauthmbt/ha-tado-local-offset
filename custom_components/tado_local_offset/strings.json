@@ -87,6 +87,7 @@
       "preheat_time": { "name": "Preheat duration" },
       "compensated_target": { "name": "Compensated target" },
       "last_compensation": { "name": "Last compensation" },
+	  "cooling_rate": { "name": "Cooling rate" }, 
       "next_preheat": { "name": "Next preheat start" }
     }
   },
