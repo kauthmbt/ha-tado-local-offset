@@ -16,11 +16,11 @@ from .const import (
     CONF_EXTERNAL_TEMP_SENSOR, CONF_LEARNING_BUFFER, CONF_MAX_PREHEAT_MINUTES,
     CONF_MIN_PREHEAT_MINUTES, CONF_ROOM_NAME, CONF_TADO_CLIMATE_ENTITY,
     CONF_TADO_DEVICE, CONF_TADO_HUMIDITY_SENSOR, CONF_TADO_TEMP_SENSOR,
-    CONF_TEMP_DROP_THRESHOLD, CONF_TOLERANCE, CONF_WINDOW_SENSOR,
+    CONF_TEMP_DROP_THRESHOLD, CONF_TOLERANCE, CONF_WINDOW_SENSOR, CONF_WEATHER_SENSOR,
     DEFAULT_BACKOFF_MINUTES, DEFAULT_LEARNING_BUFFER, DEFAULT_MAX_PREHEAT_MINUTES,
     DEFAULT_MIN_PREHEAT_MINUTES, DEFAULT_TEMP_DROP_THRESHOLD, DEFAULT_TOLERANCE,
     DOMAIN, MAX_BACKOFF, MAX_TOLERANCE, MIN_BACKOFF, MIN_TOLERANCE, CONF_WINDOW_OPEN_DELAY, DEFAULT_WINDOW_OPEN_DELAY,
-    CONF_MAX_HEATING_CYCLES, DEFAULT_MAX_HEATING_CYCLES
+    CONF_MAX_HEATING_CYCLES, CONF_OUTSIDE_TEMP_SENSOR, DEFAULT_MAX_HEATING_CYCLES
     
 )
 
@@ -96,9 +96,13 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_TADO_HUMIDITY_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
                 ),
-                # DAS HIER FÜR DIE PREDICTIVE LOGIK:
-                vol.Optional("solar_sensor"): selector.EntitySelector(
+                # PREDICTIVE LOGIG
+                vol.Optional(CONF_SOLAR_SENSOR): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor") # Dein Solar-Sensor
+                ),
+                # WEATHER ENTITY
+                vol.Optional(CONF_WEATHER_SENSOR): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="weather")
                 ),
             }),
         )
@@ -170,12 +174,19 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
             # If the field was left blank, delete it or save it as is
             if CONF_SOLAR_SENSOR in user_input and not user_input[CONF_SOLAR_SENSOR]:
                 user_input[CONF_SOLAR_SENSOR] = None
+            if CONF_WEATHER_SENSOR in user_input and not user_input[CONF_WEATHER_SENSOR]:
+                user_input[CONF_WEATHER_SENSOR] = None
+            if CONF_OUTSIDE_TEMP_SENSOR in user_input and not user_input[CONF_OUTSIDE_TEMP_SENSOR]:
+                user_input[CONF_OUTSIDE_TEMP_SENSOR] = None
             self.options.update(user_input)
             return self.async_create_entry(title="", data=self.options)
 
         # Determine the correct default value (None instead of “”)
         current_solar = self.options.get(CONF_SOLAR_SENSOR)
-        solar_default = current_solar if current_solar else vol.UNDEFINED
+        # Read the current value for Weather
+        current_weather = self.options.get(CONF_WEATHER_SENSOR)
+        # External temp sensor (outside)
+        current_outside = self.options.get(CONF_OUTSIDE_TEMP_SENSOR)
 
         schema = {
             vol.Optional(CONF_ENABLE_PREHEAT, default=self.options.get(CONF_ENABLE_PREHEAT, False)): bool,
@@ -201,6 +212,25 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
         else:
             schema[vol.Optional(CONF_SOLAR_SENSOR)] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
+            )
+        # Bind Weather-Sensor to schema
+        if current_weather:
+            schema[vol.Optional(CONF_WEATHER_SENSOR, default=current_weather)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="weather")
+            )
+        else:
+            schema[vol.Optional(CONF_WEATHER_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="weather")
+            )
+        # Bind Outside-Temp-Sensor to schema (echter Außensensor,
+        # bevorzugt vor der Weather-Entity)
+        if current_outside:
+            schema[vol.Optional(CONF_OUTSIDE_TEMP_SENSOR, default=current_outside)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            )
+        else:
+            schema[vol.Optional(CONF_OUTSIDE_TEMP_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
             )
 
         return self.async_show_form(

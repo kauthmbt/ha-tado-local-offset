@@ -29,14 +29,14 @@ class TadoLocalOffsetBinarySensorDescription(BinarySensorEntityDescription):
 BINARY_SENSORS: tuple[TadoLocalOffsetBinarySensorDescription, ...] = (
     TadoLocalOffsetBinarySensorDescription(
         key="window_open",
-        name="Window Open",
+        translation_key="window_open",
         device_class=BinarySensorDeviceClass.WINDOW,
         icon="mdi:window-open-variant",
         value_fn=lambda data: data.window_open,
     ),
     TadoLocalOffsetBinarySensorDescription(
         key="compensation_active",
-        name="Compensation Active",
+        translation_key="compensation_active", 
         icon="mdi:thermometer-auto",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
@@ -44,7 +44,7 @@ BINARY_SENSORS: tuple[TadoLocalOffsetBinarySensorDescription, ...] = (
     ),
     TadoLocalOffsetBinarySensorDescription(
         key="is_preheating",
-        name="Preheating",
+        translation_key="is_preheating",
         icon="mdi:fire-alert",
         device_class=BinarySensorDeviceClass.HEAT,
         value_fn=lambda data: data.is_preheating,

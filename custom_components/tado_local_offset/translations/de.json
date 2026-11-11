@@ -8,8 +8,7 @@
         "data": {
           "room_name": "Raumname",
           "tado_device": "Tado Thermostat (HomeKit)",
-          "external_temp_sensor": "Externer Temperatursensor",
-          "scan_interval": "Update-Intervall (Sekunden)"
+          "external_temp_sensor": "Externer Temperatursensor"
         },
         "data_description": {
           "room_name": "Z.B. 'Wohnzimmer' oder 'Jugendzimmer'",
@@ -23,7 +22,8 @@
         "data": {
           "tado_climate_entity": "Tado Klima-Entität",
           "tado_temp_sensor": "Tado interner Sensor",
-          "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)"
+          "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)",
+          "weather_sensor": "Wetter-Entität (für Vorheiz-Korrektur)"
         }
       },
       "window_detection": {
@@ -44,11 +44,12 @@
           "tolerance": "Temperatur-Toleranz (°C)",
           "backoff_minutes": "Wartezeit (Minuten)",
           "enable_battery_saver": "Batteriesparmodus",
-		  "solar_sensor": "Solar-Sensor (Proaktiv)",
+          "solar_sensor": "Solar-Sensor (Proaktiv)",
           "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit (Min)",
-          "max_preheat_minutes": "Max. Vorheizzeit (Min)"
+          "max_preheat_minutes": "Max. Vorheizzeit (Min)",
+          "max_heating_cycles": "Max. Lernzyklen (Historie)"
         }
       }
     }
@@ -65,25 +66,28 @@
       }
     },
     "binary_sensor": {
-      "preheating": { "name": "Vorheizen" },
-      "window_open": { "name": "Fenster offen" }
+      "is_preheating": { "name": "Vorheizen" },
+      "window_open": { "name": "Fenster offen" },
+      "compensation_active": { "name": "Kompensation aktiv" }
+    },
+    "switch": {
+      "battery_saver": { "name": "Batteriesparmodus" },
+      "window_override": { "name": "Fenster-Übersteuerung" },
+      "compensation_enabled": { "name": "Kompensation aktiviert" }
     },
     "number": {
-      "learning_buffer": { "name": "Lern-Puffer" },
-      "min_preheat_minutes": { "name": "Minimale Vorheizzeit" },
-      "max_preheat_minutes": { "name": "Maximale Vorheizzeit" },
-      "temp_drop_threshold": { "name": "Temperaturabfall-Limit" },
-      "window_open_delay": { "name": "Fenster-Offen-Verzögerung" }
-    },  
+      "desired_temperature": { "name": "Solltemperatur" },
+      "tolerance": { "name": "Toleranz" },
+      "backoff_minutes": { "name": "Wartezeit (Minuten)" },
+      "max_heating_cycles": { "name": "Max. Lernzyklen" }
+    },
     "sensor": {
       "temperature_offset": { "name": "Temperatur-Offset" },
       "heating_rate": { "name": "Heizrate" },
       "preheat_time": { "name": "Vorheiz-Dauer" },
       "compensated_target": { "name": "Kompensiertes Ziel" },
       "last_compensation": { "name": "Letzte Korrektur" },
-      "next_preheat": { "name": "Nächster Vorheiz-Start" },
-      "next_preheat_start": { "name": "Nächster Heizbeginn" },
-      "preheat_order_target": { "name": "Vorheiz-Zieltemperatur" }
+      "next_preheat": { "name": "Nächster Vorheiz-Start" }
     }
   },
   "options": {
@@ -103,7 +107,7 @@
         "data": {
           "enable_window_detection": "Fenster-Sensor nutzen",
           "window_sensor": "Fenster-/Türsensoren (Mehrfachauswahl)",
-		  "window_open_delay": "Verzögerung beim Öffnen (Sekunden)",
+          "window_open_delay": "Verzögerung beim Öffnen (Sekunden)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Abfall-Limit (°C)"
         }
@@ -113,10 +117,13 @@
         "description": "Lernfunktion und Puffer-Zeiten.",
         "data": {
           "solar_sensor": "Solar-Sensor (Proaktiv)",
-		  "enable_preheat": "Vorheizen (Lernfunktion)",
+          "weather_sensor": "Wetter-Entität (für Vorheiz-Korrektur)",
+          "outside_temp_sensor": "Außen-Temperatursensor (bevorzugt vor Wetter-Entität)",
+          "enable_preheat": "Vorheizen (Lernfunktion)",
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit (Min)",
-          "max_preheat_minutes": "Max. Vorheizzeit (Min)"
+          "max_preheat_minutes": "Max. Vorheizzeit (Min)",
+          "max_heating_cycles": "Max. Lernzyklen (Historie)"
         }
       }
     }
@@ -134,11 +141,15 @@
       "name": "Vorheizen planen",
       "description": "Startzeitpunkt basierend auf Zielzeit und gelernter Rate berechnen.",
       "fields": {
+        "entity_id": {
+          "name": "Entität",
+          "description": "Das virtuelle Thermostat, für das das Vorheizen geplant wird."
+        },
         "target_time": {
           "name": "Ziel-Uhrzeit",
           "description": "Wann soll die Temperatur erreicht sein? (HH:MM)"
         },
-        "target_temp": {
+        "target_temperature": {
           "name": "Ziel-Temperatur",
           "description": "Welche Temperatur wird gewünscht?"
         }

@@ -104,6 +104,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Here, only the data is transferred; the logic is handled by the coordinator
             coordinator.data.target_time = call.data[ATTR_TARGET_TIME]
             coordinator.data.target_temperature = call.data[ATTR_TARGET_TEMPERATURE]
+            coordinator.hass.async_create_task(coordinator._async_save_data())
             
             _LOGGER.info(
                 "Pre-heat for %s set to %s at %.1f°C",

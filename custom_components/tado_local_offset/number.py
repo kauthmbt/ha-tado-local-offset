@@ -42,7 +42,7 @@ class TadoLocalOffsetNumberDescription(NumberEntityDescription):
 NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
     TadoLocalOffsetNumberDescription(
         key="desired_temperature",
-        name="Desired Temperature",
+        translation_key="desired_temperature",
         icon="mdi:thermometer",
         native_min_value=MIN_TEMP,
         native_max_value=MAX_TEMP,
@@ -53,7 +53,7 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
     ),
     TadoLocalOffsetNumberDescription(
         key="tolerance",
-        name="Tolerance",
+        translation_key="tolerance",
         icon="mdi:thermometer-lines",
         entity_category=EntityCategory.CONFIG,
         native_min_value=MIN_TOLERANCE,
@@ -65,7 +65,7 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
     ),
     TadoLocalOffsetNumberDescription(
         key="backoff_minutes",
-        name="Backoff Minutes",
+        translation_key="backoff_minutes",
         icon="mdi:timer-sand",
         entity_category=EntityCategory.CONFIG,
         native_min_value=MIN_BACKOFF,
@@ -77,7 +77,7 @@ NUMBERS: tuple[TadoLocalOffsetNumberDescription, ...] = (
     ),
     TadoLocalOffsetNumberDescription(
         key="max_heating_cycles",
-        name="Max Heating Cycles",
+        translation_key="max_heating_cycles",
         icon="mdi:counter",
         entity_category=EntityCategory.CONFIG,
         native_min_value=5,
