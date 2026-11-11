@@ -1,55 +1,159 @@
 {
+  "title": "Tado Local Offset",
   "config": {
     "step": {
       "user": {
         "title": "1. Basic Configuration",
+        "description": "Set the basic data for temperature compensation.",
         "data": {
-          "room_name": "Room Name",
-          "tado_device": "Tado Device",
-          "external_temp_sensor": "External Temp Sensor"
+          "room_name": "Room name",
+          "tado_device": "Tado Thermostat (HomeKit)",
+          "external_temp_sensor": "External temperature sensor"
+        },
+        "data_description": {
+          "room_name": "E.g. 'Living room' or 'Kids room'",
+          "tado_device": "The Tado device integrated via HomeKit",
+          "external_temp_sensor": "The sensor providing the 'real' room temperature"
         }
       },
       "sensors": {
         "title": "2. Sensor Mapping",
+        "description": "Please review the automatically detected Tado entities for this room.",
         "data": {
-          "tado_climate_entity": "Climate Entity",
-          "tado_temp_sensor": "Internal Sensor",
-          "tado_humidity_sensor": "Humidity Sensor",
-		  "solar_sensor": "Solar Sensor (Predictive)"
+          "tado_climate_entity": "Tado climate entity",
+          "tado_temp_sensor": "Tado internal sensor",
+          "tado_humidity_sensor": "Tado humidity (optional)",
+          "weather_sensor": "Weather entity (for preheat correction)"
         }
       },
-      "window_detection": { "title": "3. Window Detection" },
-      "advanced_settings": { "title": "4. Advanced Settings" }
+      "window_detection": {
+        "title": "3. Window Detection",
+        "description": "How should the system react to open windows?",
+        "data": {
+          "enable_window_detection": "Use window sensor",
+          "window_sensor": "Window/door sensors (multiple selection)",
+          "window_open_delay": "Delay on open (seconds)",
+          "enable_temp_drop_detection": "Detect temperature drop",
+          "temp_drop_threshold": "Drop limit (\u00b0C)"
+        }
+      },
+      "advanced_settings": {
+        "title": "4. Advanced Settings",
+        "description": "Fine-tuning for tolerance, battery and preheating.",
+        "data": {
+          "tolerance": "Temperature tolerance (\u00b0C)",
+          "backoff_minutes": "Wait time (minutes)",
+          "enable_battery_saver": "Battery saver mode",
+          "solar_sensor": "Solar sensor (proactive)",
+          "enable_preheat": "Preheating (learning function)",
+          "learning_buffer": "Time buffer (%)",
+          "min_preheat_minutes": "Min. preheat time (min)",
+          "max_preheat_minutes": "Max. preheat time (min)",
+          "max_heating_cycles": "Max. learning cycles (history)"
+        }
+      }
     }
   },
   "entity": {
     "climate": {
       "tado_local_offset": {
         "state_attributes": {
-          "preheat_order_target": { "name": "Preheat Target Temp" },
-          "next_preheat_start": { "name": "Next Preheat Start" },
-          "preheat_minutes": { "name": "Preheat Duration (min)" },
-          "last_learning_rate": { "name": "Last Learning Rate" }
+          "preheat_order_target": { "name": "Target temperature (preheat)" },
+          "next_preheat_start": { "name": "Scheduled start" },
+          "preheat_minutes": { "name": "Preheat duration (minutes)" },
+          "last_learning_rate": { "name": "Last learning rate" }
         }
       }
     },
+    "binary_sensor": {
+      "is_preheating": { "name": "Preheating" },
+      "window_open": { "name": "Window open" },
+      "compensation_active": { "name": "Compensation active" }
+    },
+    "switch": {
+      "battery_saver": { "name": "Battery saver" },
+      "window_override": { "name": "Window override" },
+      "compensation_enabled": { "name": "Compensation enabled" }
+    },
+    "number": {
+      "desired_temperature": { "name": "Desired temperature" },
+      "tolerance": { "name": "Tolerance" },
+      "backoff_minutes": { "name": "Backoff minutes" },
+      "max_heating_cycles": { "name": "Max heating cycles" }
+    },
     "sensor": {
-      "temperature_offset": { "name": "Temperature Offset" },
-      "heating_rate": { "name": "Heating Rate" },
-      "preheat_time": { "name": "Preheat Duration" },
-      "compensated_target": { "name": "Compensated Target" },
-      "last_compensation": { "name": "Last Correction" },
-      "next_preheat": { "name": "Next Preheat Start" }
+      "temperature_offset": { "name": "Temperature offset" },
+      "heating_rate": { "name": "Heating rate" },
+      "preheat_time": { "name": "Preheat duration" },
+      "compensated_target": { "name": "Compensated target" },
+      "last_compensation": { "name": "Last compensation" },
+      "next_preheat": { "name": "Next preheat start" }
     }
   },
   "options": {
     "step": {
-      "general_settings": { "title": "General Settings" },
-      "window_detection": { "title": "Window Detection" },
-      "advanced_settings": { "title": "Advanced & Preheat" },
-		"data": {
-          "solar_sensor": "Solar Sensor (Predictive)"
+      "general_settings": {
+        "title": "General Settings",
+        "description": "Basic parameters of the compensation.",
+        "data": {
+          "tolerance": "Temperature tolerance (\u00b0C)",
+          "backoff_minutes": "Wait time (minutes)",
+          "enable_battery_saver": "Battery saver mode"
         }
+      },
+      "window_detection": {
+        "title": "Window Detection",
+        "description": "Configuration of the shutdown when a window is open.",
+        "data": {
+          "enable_window_detection": "Use window sensor",
+          "window_sensor": "Window/door sensors (multiple selection)",
+          "window_open_delay": "Delay on open (seconds)",
+          "enable_temp_drop_detection": "Detect temperature drop",
+          "temp_drop_threshold": "Drop limit (\u00b0C)"
+        }
+      },
+      "advanced_settings": {
+        "title": "Advanced Settings & Preheating",
+        "description": "Learning function and buffer times.",
+        "data": {
+          "solar_sensor": "Solar sensor (proactive)",
+          "weather_sensor": "Weather entity (for preheat correction)",
+          "outside_temp_sensor": "Outdoor temperature sensor (preferred over weather entity)",
+          "enable_preheat": "Preheating (learning function)",
+          "learning_buffer": "Time buffer (%)",
+          "min_preheat_minutes": "Min. preheat time (min)",
+          "max_preheat_minutes": "Max. preheat time (min)",
+          "max_heating_cycles": "Max. learning cycles (history)"
+        }
+      }
+    }
+  },
+  "services": {
+    "force_compensation": {
+      "name": "Force compensation",
+      "description": "Send the offset to Tado immediately without waiting."
+    },
+    "reset_learning": {
+      "name": "Reset learning",
+      "description": "Clear the learned average (history) for this room."
+    },
+    "set_preheat": {
+      "name": "Schedule preheating",
+      "description": "Calculate the start time based on target time and learned rate.",
+      "fields": {
+        "entity_id": {
+          "name": "Entity",
+          "description": "The virtual thermostat to schedule preheating for."
+        },
+        "target_time": {
+          "name": "Target time",
+          "description": "When should the temperature be reached? (HH:MM)"
+        },
+        "target_temperature": {
+          "name": "Target temperature",
+          "description": "Which temperature is desired?"
+        }
+      }
     }
   }
 }
