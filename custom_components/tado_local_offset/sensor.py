@@ -131,7 +131,7 @@ class TadoLocalOffsetSensor(CoordinatorEntity[TadoLocalOffsetCoordinator], Senso
         self._room_name = entry.data[CONF_ROOM_NAME]
 
         # Set up device info
-        device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,

@@ -63,7 +63,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
         # SAFE ACCESS: Use .get() to avoid KeyError during initialization
         self._room_name = entry.data.get(CONF_ROOM_NAME, coordinator.room_name)
 
-        device_info = DeviceInfo(
+        self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,
