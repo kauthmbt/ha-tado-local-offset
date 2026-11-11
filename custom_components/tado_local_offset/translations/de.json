@@ -87,6 +87,7 @@
       "preheat_time": { "name": "Vorheiz-Dauer" },
       "compensated_target": { "name": "Kompensiertes Ziel" },
       "last_compensation": { "name": "Letzte Korrektur" },
+	  "cooling_rate": { "name": "Abkühlrate" },
       "next_preheat": { "name": "Nächster Vorheiz-Start" }
     }
   },
