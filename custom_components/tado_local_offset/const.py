@@ -28,7 +28,7 @@ CONF_MIN_PREHEAT_MINUTES: Final = "min_preheat_minutes"
 CONF_MAX_PREHEAT_MINUTES: Final = "max_preheat_minutes"
 CONF_WINDOW_OPEN_DELAY: Final = "window_open_delay"
 CONF_SOLAR_SENSOR: Final = "solar_sensor"
-CONF_WEATHER_SENSOR = "weather_sensor"
+CONF_WEATHER_SENSOR: Final = "weather_sensor"
 CONF_OUTSIDE_TEMP_SENSOR: Final = "outside_temp_sensor"
 CONF_MAX_HEATING_CYCLES: Final = "max_heating_cycles"
 
