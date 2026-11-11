@@ -94,3 +94,4 @@ STORAGE_VERSION: Final = 1
 # Device info
 MANUFACTURER: Final = "Tado Local Offset"
 MODEL: Final = "Virtual Thermostat"
+VERSION: Final = "2026.10.4"

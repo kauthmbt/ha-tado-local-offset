@@ -12,7 +12,7 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_ROOM_NAME, DOMAIN, MANUFACTURER, MODEL
+from .const import CONF_ROOM_NAME, DOMAIN, MANUFACTURER, MODEL, VERSION
 from .coordinator import TadoLocalOffsetCoordinator
 
 
@@ -91,7 +91,7 @@ class TadoLocalOffsetSwitch(CoordinatorEntity[TadoLocalOffsetCoordinator], Switc
             name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,
             model=MODEL,
-            sw_version="0.1.0",
+            sw_version=VERSION,
         )
 
     @property
