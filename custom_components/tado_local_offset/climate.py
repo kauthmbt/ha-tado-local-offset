@@ -27,6 +27,7 @@ from .const import (
     MAX_TEMP,
     MIN_TEMP,
     MODEL,
+    VERSION,
 )
 from .coordinator import TadoLocalOffsetCoordinator
 
@@ -68,7 +69,7 @@ class TadoLocalOffsetClimate(CoordinatorEntity[TadoLocalOffsetCoordinator], Clim
             name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,
             model=MODEL,
-            sw_version="0.1.0",
+            sw_version=VERSION,
         )
         self._attr_min_temp = MIN_TEMP
         self._attr_max_temp = MAX_TEMP

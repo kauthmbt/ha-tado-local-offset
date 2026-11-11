@@ -27,6 +27,7 @@ from .const import (
     MIN_TEMP,
     MIN_TOLERANCE,
     MODEL,
+    VERSION,
 )
 from .coordinator import TadoLocalOffsetCoordinator
 
@@ -128,7 +129,7 @@ class TadoLocalOffsetNumber(CoordinatorEntity[TadoLocalOffsetCoordinator], Numbe
             name=f"{self._room_name} Virtual Thermostat",
             manufacturer=MANUFACTURER,
             model=MODEL,
-            sw_version="0.1.0",
+            sw_version=VERSION,
         )
 
     @property
