@@ -175,12 +175,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
         self._last_reported_mins = -1 # Initial value that ensures that an update is performed the first time
 
-        # --- DIESE ZEILEN HIER HINZUFÜGEN ---
-        self._kalman_x: float | None = None  # Gefilterter Zustand
-        self._kalman_p: float = 1.0          # Schätzfehler-Trägheit
-        self._kalman_q: float = 0.02         # Prozess-Rauschen (Wie schnell ändert sich Raumtemp. real?)
-        self._kalman_r: float = 0.15         # Sensor-Rauschen (Wie stark "zappelt" der Sensor?)
-        # ------------------------------------
+        self._kalman_x: float | None = None  # Filtered State
+        self._kalman_p: float = 1.0          # Estimation Error Inertia
+        self._kalman_q: float = 0.02         # Process Noise (How Fast Does Room Temperature Actually Change?)
+        self._kalman_r: float = 0.15         # Sensor Noise (How much does the sensor “flicker”?)
         
         super().__init__(
             hass,
@@ -271,32 +269,32 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
 
     def _filter_temperature(self, measurement: float) -> float:
-        """Schützt vor Sensorsprüngen mittels Kalman-Filterung."""
+        “”“Prevents sensor jumps using Kalman filtering.”“”
         if self._kalman_x is None:
             self._kalman_x = measurement
             return measurement
             
-        # 1. Vorhersage-Update
+        # 1. Forecast-Update
         self._kalman_p = self._kalman_p + self._kalman_q
         
-        # 2. Kalman-Gain berechnen
+        # 2. Calculate Kalman-Gain
         kalman_gain = self._kalman_p / (self._kalman_p + self._kalman_r)
         
-        # 3. Schätzung aktualisieren
+        # 3. Update Estimate
         self._kalman_x = self._kalman_x + kalman_gain * (measurement - self._kalman_x)
         
-        # 4. Schätzfehler aktualisieren
+        # 4. Update estimation errors
         self._kalman_p = (1.0 - kalman_gain) * self._kalman_p
         
         return self._kalman_x
 
     async def async_get_weather_correction_factor(self, target_minutes: float) -> float:
-        """Korrekturfaktor aus der Wettervorhersage für die Vorheizphase.
+        “”"Correction factor from the weather forecast for the preheating phase.
 
-        >1.0 = kälter werdend -> länger vorheizen;
-        <1.0 = wärmer werdend -> kürzer vorheizen.
-        Fehler/fehlende Daten führen immer zu 1.0 (Neutralwert).
-        """
+        >1.0 = getting colder -> preheat longer;
+        <1.0 = getting warmer -> preheat shorter.
+        Errors or missing data always result in 1.0 (neutral value).
+        “”"
         weather_entity = (
             self.entry.options.get(CONF_WEATHER_SENSOR)
             or self.entry.data.get(CONF_WEATHER_SENSOR)
@@ -312,8 +310,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if base_temp is None:
             return 1.0
 
-        # Prognose-Temperatur zur Zeit (Jetzt + target_minutes) suchen.
-        # forecasts[0] gilt für die kommende Stunde, daher Index >= 1.
+        # Find the forecast temperature for the current time (now + target_minutes).
+        # forecasts[0] refers to the coming hour, so the index must be >= 1.
         future_index = min(max(int(target_minutes / 60), 1), len(forecast) - 1)
         future_temp = forecast[future_index].get("temperature", base_temp)
         if future_temp is None:
@@ -366,10 +364,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                                     self.room_name, tado_temp, external_temp)
                     return self.data
 
-                # 1. Externen Sensor durch den Kalman-Filter jagen
+                # 1. Run the external sensor through the Kalman filter
                 filtered_external_temp = self._filter_temperature(external_temp)
                 
-                # 2. Prädiktiven Solar-Faktor berechnen (MPC-Ansatz)
+                # 2. Calculate the predictive solar factor (MPC approach)
                 solar_modifier = 0.0
                 solar_entity_id = self.entry.options.get(CONF_SOLAR_SENSOR) or self.entry.data.get(CONF_SOLAR_SENSOR)
                 
@@ -383,13 +381,13 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         except ValueError:
                             _LOGGER.warning("[%s] Solar sensor state is not a valid number: %s", self.room_name, solar_state.state)
 
-                # 3. Werte im Daten-Objekt speichern (Jetzt gefiltert!)
+                # 3. Save values in the data object (Now filtered!)
                 self.data.external_temp = filtered_external_temp
                 self.data.tado_temp = tado_temp
                 
-                # 4. Den finalen Offset direkt hier berechnen (inklusive Solar-Vorrang für EG/OG)
-                # Keller: solar_modifier ist 0.0 -> normale Differenz
-                # EG/OG: Zieht den Solarwert ab, Tado schließt das Ventil früher
+                # 4. Calculate the final offset right here (including solar priority for ground floor/upper floors)
+                # Basement: solar_modifier is 0.0 -> normal difference
+                # Ground floor/upper floors: Subtracts the solar value; Tado closes the valve earlier
                 self.data.offset = filtered_external_temp - tado_temp + solar_modifier
                 
                 _LOGGER.info(
@@ -530,8 +528,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         if not self.data.window_open:
                             if not self.data.is_preheating:
                                 _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C", self.room_name, self.data.target_temperature)
-                                self._cycle_learned = False          # Latch freigeben
-                                self._heating_start_time = None      # frische Ankerung am Heat-Onset
+                                self._cycle_learned = False          # Release latch
+                                self._heating_start_time = None      # Fresh anchoring at the onset of heat
                                 self._heating_start_temp = None
                                 self.hass.async_create_task(
                                     self.async_force_compensation()
@@ -637,7 +635,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # 2. Temperature drop detection
         if self.enable_temp_drop_detection:
-            # Wenn der Sturz erkannt wurde, geben wir True zurück
+            # If a fall was detected, we return True
             if self._detect_temperature_drop():
                 _LOGGER.debug("Window open detected by drop in temperature")
                 return True
@@ -781,8 +779,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 weather_factor_dynamic, new_val,
             )
 
-        # WICHTIG: immer den aktuell berechneten Wert zurückgeben,
-        # nicht _last_reported_mins – sonst springt next_preheat_start.
+        # IMPORTANT: Always return the currently calculated value,
+        # not _last_reported_mins—otherwise, next_preheat_start will jump.
         return new_val
     
     async def async_set_desired_temperature(self, temperature: float) -> None:
@@ -792,7 +790,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         await self.async_calculate_and_apply_compensation(force=True)
 
     async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
-        """Berechnet die Temperaturkorrektur und sendet sie gerundet an Tado."""
+        “”“Calculates the temperature correction and sends it, rounded, to Tado.”“”
         now = dt_util.utcnow()
 
         # 1. Preliminary check: Should anything be sent at all?
@@ -922,11 +920,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def _calculate_instant_heating_rate(self, current_external_temp: float) -> float | None:
         """Measure the heating rates ONLY in the preheat mode (one sample per phase)."""
-        # Gate: Nur während aktiver Preheat-Phase lernen
+        # Gate: Learn only during the active preheat phase
         if not self.data.is_preheating:
             return None
-        # Latch: Nur EIN Sample pro Phase — Repeated Sampling verfälscht
-        # die History Richtung Spätphasen-Raten (Delta schrumpft -> Rate sinkt)
+        # Latch: Only ONE sample per phase — repeated sampling distorts
+        # the history toward late-phase rates (delta shrinks -> rate decreases)
         if self._cycle_learned:
             return None
 
@@ -988,20 +986,20 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         return instant_rate
 
     def _calculate_instant_cooling_rate(self, current_temp: float) -> float | None:
-        """Lernt die Abkühlrate aus Phasen ohne aktives Heizen (fallspezifisch)."""
+        “”“Determine the cooling rate from phases without active heating (case-specific).”“”
         if self._cooling_start_time is None or self._cooling_start_temp is None:
             return None
 
         duration_hrs = (dt_util.utcnow() - self._cooling_start_time).total_seconds() / 3600
         temp_diff = self._cooling_start_temp - current_temp  # positiv = Abkühlung
 
-        # Sammelphase: Kriterien noch nicht erfüllt -> weiter beobachten
+        # Accumulation phase: Criteria not yet met -> continue monitoring
         if duration_hrs < COOLING_MIN_DURATION_HRS or temp_diff < COOLING_MIN_DELTA:
             return None
 
         instant_rate = temp_diff / duration_hrs
 
-        # Plausibilisierung: schnelle Abfälle sind Lüftung/Tür, kein thermischer Verlust
+        # Plausibility check: Rapid heat loss occurs through ventilation and doors, not thermal loss
         if instant_rate > MAX_COOLING_RATE:
             _LOGGER.debug(
                 "[%s] Cooling cycle ignored - rate %.2f°C/h exceeds max %.1f (likely ventilation)",
@@ -1049,8 +1047,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             order = stored_data["preheat_order"]
             raw_time = order.get("target_time")
             if raw_time is not None:
-                # Store/JSON serialisiert datetime.time zu einem String (ISO-Format),
-                # deshalb muessen wir ihn nach dem Laden zurueckwandeln:
+                # Store/JSON serializes `datetime.time` into a string (ISO format),
+                # so we need to deserialize it after loading:
                 if isinstance(raw_time, str):
                     parsed = dt_util.parse_time(raw_time)
                     if parsed is None:
