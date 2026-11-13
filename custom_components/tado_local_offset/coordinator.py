@@ -224,6 +224,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # Internal state
         self._last_compensation_time: datetime | None = None
         self._last_sent_compensated_target: float | None = None
+        self._cycle_learned: bool = False
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
         self._cooling_start_time: datetime | None = None
@@ -410,20 +411,24 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 self.data.hvac_mode = "heat"
             self.data.hvac_action = tado_climate_state.attributes.get("hvac_action", "idle")
             self.data.last_update = dt_util.utcnow()
-            # --- Live-Learning ---
+            
             current_hvac = self.data.hvac_action
-            if current_hvac == "heating":
+            
+            # --- Live-Learning (only Preheat)---
+            if current_hvac == "heating" and self.data.is_preheating:
                 if self._heating_start_time is None:
                     self._heating_start_time = dt_util.utcnow()
-                    self._heating_start_temp = self.data.external_temp 
-                    _LOGGER.info("[%s] Heating cycle learning started at %.2f°C (External)", self.room_name, self.data.external_temp)
-                else:
-                    # We only call the function. 
-                    # It takes care of the list, the average, and saving internally.
+                    self._heating_start_temp = self.data.external_temp
+                    _LOGGER.info(
+                        "[%s] Heating cycle learning started at %.2f°C (External)",
+                        self.room_name, self.data.external_temp,
+                    )
+                elif not self._cycle_learned:
                     self._calculate_instant_heating_rate(self.data.external_temp)
-            else:
-                if self._heating_start_time is not None:
-                    _LOGGER.info("[%s] Heating cycle completed. Data has been processed.", self.room_name)
+            elif not self.data.is_preheating:
+                # Preheat phase completed (CASE A/C, order consumed, window)
+                # -> Discard anchor. Short modulation pauses WITH is_preheating
+                #    leave the anchors in place (phase continues).
                 self._heating_start_time = None
                 self._heating_start_temp = None
 
@@ -525,10 +530,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         if not self.data.window_open:
                             if not self.data.is_preheating:
                                 _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C", self.room_name, self.data.target_temperature)
-                                # Preheat-Start zahlt selbst fuer den Write:
-                                # Backoff-Window gezielt umgehen, damit der
-                                # berechnete Startzeitpunkt nicht um bis zu
-                                # backoff_minutes nach hinten faellt.
+                                self._cycle_learned = False          # Latch freigeben
+                                self._heating_start_time = None      # frische Ankerung am Heat-Onset
+                                self._heating_start_temp = None
                                 self.hass.async_create_task(
                                     self.async_force_compensation()
                                 )
@@ -902,6 +906,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._cooling_start_time = None
         self._cooling_start_temp = None
         self.logger.info("Reset learning data for %s", self.room_name)
+        self._cycle_learned = False
 
     def set_compensation_enabled(self, enabled: bool) -> None:
         """Enable or disable compensation."""
@@ -916,7 +921,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.data.window_override = override
 
     def _calculate_instant_heating_rate(self, current_external_temp: float) -> float | None:
-        """Calculates the heating rate based on the external sensor (immune to offset jumps)."""
+        """Measure the heating rates ONLY in the preheat mode (one sample per phase)."""
+        # Gate: Nur während aktiver Preheat-Phase lernen
+        if not self.data.is_preheating:
+            return None
+        # Latch: Nur EIN Sample pro Phase — Repeated Sampling verfälscht
+        # die History Richtung Spätphasen-Raten (Delta schrumpft -> Rate sinkt)
+        if self._cycle_learned:
+            return None
+
         if self._heating_start_time is None or self._heating_start_temp is None:
             return None
 
@@ -959,14 +972,19 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             return None
 
         # 4. SAVE DATA (just one time!)
+        self._cycle_learned = True
         self.data.heating_history.append(instant_rate)
-        
         if len(self.data.heating_history) > self.max_heating_cycles:
             self.data.heating_history.pop(0)
 
         self.data.heating_rate = sum(self.data.heating_history) / len(self.data.heating_history)
         self.hass.async_create_task(self._async_save_data())
 
+        _LOGGER.info(
+            "[%s] Heating cycle completed. Rate: %.2f°C/h (avg of %d cycles: %.2f°C/h). Data has been processed.",
+            self.room_name, instant_rate,
+            len(self.data.heating_history), self.data.heating_rate,
+        )
         return instant_rate
 
     def _calculate_instant_cooling_rate(self, current_temp: float) -> float | None:
