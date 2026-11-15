@@ -73,23 +73,23 @@ _LOGGER = logging.getLogger(__name__)
 
 # =========================================================
 # Weather-Forecast-Cache: {entity_id: (timestamp_utc, forecast_list)}
-# Wird von ALLEN Raum-Coordinatoren geteilt -> keine parallelen Duplikat-Calls.
+# Shared by ALL room coordinators -> no duplicate calls happening at the same time.
 _WEATHER_FORECAST_CACHE: dict[str, tuple[datetime, list[dict[str, Any]]]] = {}
 
-WEATHER_CACHE_TTL_SECONDS = 1800  # Forecast max. 30 Minuten alt
+WEATHER_CACHE_TTL_SECONDS = 1800  # Forecast no more than 30 minutes old
 WEATHER_CACHE_LOCK = asyncio.Lock()
 # =========================================================
 
 async def async_get_hourly_forecast_cached(
     hass: HomeAssistant, weather_entity: str
 ) -> list[dict[str, Any]] | None:
-    """Holt den Hourly-Forecast einer Weather-Entity mit TTL-Cache.
+    """Retrieves the hourly forecast for a weather entity using a TTL cache.
 
-    Gibt None zurück, wenn die Entity fehlt/unavailable ist oder der
-    Forecast-Call fehlschlägt – Never raises.
+    Returns None if the entity is missing or unavailable, or if the
+    forecast call fails – Never raises an exception.
     """
-    # Verfügbarkeit prüfen, BEVOR der Service-Call läuft (spart Log-Spam
-    # während des HA-Starts, wenn die Weather-Integration noch lädt)
+    # Check availability BEFORE the service call runs (saves on log spam
+    # during HA startup, while the weather integration is still loading)
     state = hass.states.get(weather_entity)
     if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
         return None
@@ -102,7 +102,7 @@ async def async_get_hourly_forecast_cached(
         return cached[1]
 
     async with WEATHER_CACHE_LOCK:
-        # Double-Check nach Lock-Acquisition (parallele Räume warten hier)
+        # Double-check after lock acquisition (parallel spaces wait here)
         cached = _WEATHER_FORECAST_CACHE.get(weather_entity)
         if cached and (now - cached[0]).total_seconds() < WEATHER_CACHE_TTL_SECONDS:
             return cached[1]
@@ -116,7 +116,7 @@ async def async_get_hourly_forecast_cached(
                 return_response=True,
             )
         except Exception as err:
-            _LOGGER.warning("Forecast-Call für %s fehlgeschlagen: %s", weather_entity, err)
+            _LOGGER.warning("Forecast call for %s failed: %s", weather_entity, err)
             return None
 
         if not response or weather_entity not in response:
@@ -175,12 +175,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
         self._last_reported_mins = -1 # Initial value that ensures that an update is performed the first time
 
-        # --- DIESE ZEILEN HIER HINZUFÜGEN ---
-        self._kalman_x: float | None = None  # Gefilterter Zustand
-        self._kalman_p: float = 1.0          # Schätzfehler-Trägheit
-        self._kalman_q: float = 0.02         # Prozess-Rauschen (Wie schnell ändert sich Raumtemp. real?)
-        self._kalman_r: float = 0.15         # Sensor-Rauschen (Wie stark "zappelt" der Sensor?)
-        # ------------------------------------
+        self._kalman_x: float | None = None  # Filtered State
+        self._kalman_p: float = 1.0          # Estimation Error Inertia
+        self._kalman_q: float = 0.02         # Process Noise (How Fast Does Room Temperature Actually Change?)
+        self._kalman_r: float = 0.15         # Sensor Noise (How much does the sensor “flicker”?)
         
         super().__init__(
             hass,
@@ -230,7 +228,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._heating_start_temp: float | None = None
         self._cooling_start_time: datetime | None = None
         self._cooling_start_temp: float | None = None
-        self._cooling_cycle_learned: bool = False
         self._heating_external_start_temp: float | None = None 
         self._temp_history: list[tuple[datetime, float]] = []
         self._is_heating = False 
@@ -240,6 +237,14 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._data_loaded: bool = False
         # Timestamp of the last VALIDATED end of ventilation (for learning lockout)
         self._window_closed_at: datetime | None = None
+        # --- Preheat phase latch (v13) ---
+        # Once ignited, the phase ignores the recomputed start_time until
+        # target_time is reached (or the order changes/is cleared).
+        # Separate from data.is_preheating, which doubles as the "suspend"
+        # signal while a window is open (binary stays honest, latch survives).
+        self._preheat_latched: bool = False
+        self._latched_order_key: tuple | None = None
+        self._preheat_ignited_at: datetime | None = None
 
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
@@ -277,31 +282,31 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
 
     def _filter_temperature(self, measurement: float) -> float:
-        """Schützt vor Sensorsprüngen mittels Kalman-Filterung."""
+        """Prevents sensor jumps using Kalman filtering."""
         if self._kalman_x is None:
             self._kalman_x = measurement
             return measurement
             
-        # 1. Vorhersage-Update
+        # 1. Prediction-Update
         self._kalman_p = self._kalman_p + self._kalman_q
         
-        # 2. Kalman-Gain berechnen
+        # 2. Calculate the Kalman gain
         kalman_gain = self._kalman_p / (self._kalman_p + self._kalman_r)
         
-        # 3. Schätzung aktualisieren
+        # 3. Update Estimation
         self._kalman_x = self._kalman_x + kalman_gain * (measurement - self._kalman_x)
         
-        # 4. Schätzfehler aktualisieren
+        # 4. Update estimation errors
         self._kalman_p = (1.0 - kalman_gain) * self._kalman_p
         
         return self._kalman_x
 
     async def async_get_weather_correction_factor(self, target_minutes: float) -> float:
-        """Korrekturfaktor aus der Wettervorhersage für die Vorheizphase.
+        """Correction factor from the weather forecast for the preheating phase.
 
-        >1.0 = kälter werdend -> länger vorheizen;
-        <1.0 = wärmer werdend -> kürzer vorheizen.
-        Fehler/fehlende Daten führen immer zu 1.0 (Neutralwert).
+        >1.0 = getting colder -> preheat longer;
+        <1.0 = getting warmer -> preheat for a shorter time.
+        Errors or missing data always result in a value of 1.0 (neutral value).
         """
         weather_entity = (
             self.entry.options.get(CONF_WEATHER_SENSOR)
@@ -318,8 +323,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if base_temp is None:
             return 1.0
 
-        # Prognose-Temperatur zur Zeit (Jetzt + target_minutes) suchen.
-        # forecasts[0] gilt für die kommende Stunde, daher Index >= 1.
+        # Find the forecast temperature for the current time (now + target_minutes).
+        # forecasts[0] refers to the coming hour, so the index must be >= 1.
         future_index = min(max(int(target_minutes / 60), 1), len(forecast) - 1)
         future_temp = forecast[future_index].get("temperature", base_temp)
         if future_temp is None:
@@ -342,8 +347,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 _LOGGER.debug("Sensors for %s not yet fully initialized", self.room_name)
                 return self.data
                 
-            # --- NEW: Remember current window state ---
-            old_window_state = self.data.window_open
             # Get current sensor states
             external_temp_state = self.hass.states.get(self.external_temp_sensor)
             tado_temp_state = self.hass.states.get(self.tado_temp_sensor)
@@ -372,10 +375,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                                     self.room_name, tado_temp, external_temp)
                     return self.data
 
-                # 1. Externen Sensor durch den Kalman-Filter jagen
+                # 1. Run the external sensor through the Kalman filter
                 filtered_external_temp = self._filter_temperature(external_temp)
                 
-                # 2. Prädiktiven Solar-Faktor berechnen (MPC-Ansatz)
+                # 2. Calculate the predictive solar factor (MPC approach)
                 solar_modifier = 0.0
                 solar_entity_id = self.entry.options.get(CONF_SOLAR_SENSOR) or self.entry.data.get(CONF_SOLAR_SENSOR)
                 
@@ -384,18 +387,18 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     if solar_state and solar_state.state not in ("unknown", "unavailable"):
                         try:
                             solar_watt = float(solar_state.state)
-                            # Jede 100 W/m² verringern den Offset proaktiv um 0,05°C
+                            # For every 100 W/m², proactively reduce the offset by 0.05°C
                             solar_modifier = solar_watt * 0.0005 
                         except ValueError:
                             _LOGGER.warning("[%s] Solar sensor state is not a valid number: %s", self.room_name, solar_state.state)
 
-                # 3. Werte im Daten-Objekt speichern (Jetzt gefiltert!)
+                # 3. Save values in the data object (Now filtered!)
                 self.data.external_temp = filtered_external_temp
                 self.data.tado_temp = tado_temp
                 
-                # 4. Den finalen Offset direkt hier berechnen (inklusive Solar-Vorrang für EG/OG)
-                # Keller: solar_modifier ist 0.0 -> normale Differenz
-                # EG/OG: Zieht den Solarwert ab, Tado schließt das Ventil früher
+                # 4. Calculate the final offset right here (including solar priority for ground floor/upper floors)
+                # Basement: solar_modifier is 0.0 -> normal difference
+                # Ground floor/upper floors: Subtracts the solar value; Tado closes the valve earlier
                 self.data.offset = filtered_external_temp - tado_temp + solar_modifier
                 
                 _LOGGER.info(
@@ -454,11 +457,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 elif not self._cooling_cycle_learned:
                     self._calculate_instant_cooling_rate(self.data.external_temp)
             else:
-                # Heizen aktiv, Fenster offen oder Ruhephase -> Zyklus verwerfen
+                # Heating on, window open, or idle mode -> Skip cycle
                 self._cooling_start_time = None
                 self._cooling_start_temp = None
-            # Calculate offset
-            #self.data.offset = external_temp - tado_temp
 
             # Detect external target temperature changes (schedules, manual, app)
             # and sync back to desired_temp before compensation runs
@@ -467,8 +468,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             # Update temperature history for drop detection
             self._update_temp_history(external_temp)
 
-            # Check window status
-            #self.data.window_open = self._check_window_open()
             # --- WINDOW LOGIC START ---
             old_window_state = self.data.window_open
             self.data.window_open = self._check_window_open()
@@ -498,10 +497,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             if self.enable_preheat:
                 now = dt_util.now()
                 
-                # 1. Fetch outside temperature (Your specific sensor)
-                # removed
 
-                # 2. Proceed if target_time order exists
+                # Proceed if target_time order exists
                 if self.data.target_time is not None:
                     # FIX: Handle potential UTC/Local timestamp issues exactly as required
                     target_dt = datetime.combine(now.date(), self.data.target_time)
@@ -516,29 +513,103 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     self.data.preheat_minutes = preheat_mins
                     start_time = target_dt - timedelta(minutes=preheat_mins)
                     self.data.next_preheat_start = start_time
-                    self.data.preheat_order_target = self.data.target_temperature # THIS ATRRIBUTE
+                    self.data.preheat_order_target = self.data.target_temperature # this attribute
+                    # While latched, report the ACTUAL ignition time, not the
+                    # recomputed estimate -> order_reached stays stable.
+                    if self._preheat_latched and self._preheat_ignited_at is not None:
+                        self.data.next_preheat_start = self._preheat_ignited_at
 
 
-                    # --- STATE DECISION (THE RESET FIX) ---
 
-                    # CASE A: Target reached -> RESET ORDER (Prevents weekend/rollover issue)
+                    # --- STATE DECISION (v13: LATCH instead of CASE A/B/C) ---
+
+                    # Job snapshot — detects external changes
+                    # (set_preheat service, Schedule-Edit) during the phase.
+                    order_key = (str(self.data.target_time), float(self.data.target_temperature))
+
+                    # CASE A: Target window expired -> Reset (normal output)
                     if now >= target_dt:
-                        _LOGGER.info("[%s] Pre-heat target reached. Resetting order to None.", self.room_name)
+                        # --- Log Semantics Fix: No more “target reached”
+                        #     when the target is actually missed (08:00: 21.20 vs. 21.5) ---
+                        _reached = self.data.external_temp is not None and (
+                            self.data.external_temp >= self.data.target_temperature - 0.1
+                        )
+                        _missed = max(
+                            0.0,
+                            (self.data.target_temperature or 0.0) - (self.data.external_temp or 0.0),
+                        )
+                        _LOGGER.info(
+                            "PREHEAT-RESULT [%s]: %s (temp %.2f vs target %.1f, missed by %.2f%s, "
+                            "ignited: %s)",
+                            self.room_name,
+                            "reached" if _reached else "window_expired",
+                            self.data.external_temp or 0.0,
+                            self.data.target_temperature or 0.0,
+                            _missed,
+                            "\u00b0C" if _missed > 0 else "",
+                            self._preheat_ignited_at.strftime("%H:%M") if self._preheat_ignited_at else "never",
+                        )
+                        # --- Diagnostics: Making Unmeasured Bursts Visible ---
+                        if self._preheat_latched and not self._cycle_learned:
+                            _dur = 0.0
+                            _delta = 0.0
+                            if self._heating_start_time is not None:
+                                _dur = (dt_util.utcnow() - self._heating_start_time).total_seconds() / 3600
+                                _delta = (self.data.external_temp or 0.0) - (self._heating_start_temp or 0.0)
+                            _LOGGER.debug(
+                                "Pre-heat burst ended unmeasured: %.2f h, \u0394%.2f\u00b0C, reason: window_end",
+                                _dur, _delta,
+                            )
+                        _LOGGER.info("[%s] Pre-heat window ended. Resetting order to None.", self.room_name)
                         self.data.is_preheating = False
+                        self._preheat_latched = False
+                        self._latched_order_key = None
+                        self._preheat_ignited_at = None
                         self.data.target_time = None  # The Fix: Clears the order
                         self.data.next_preheat_start = None
                         self.data.target_temperature = 0
                         self.data.preheat_order_target = None
                         # Persist the cleared order so it doesn't resurrect after a restart
                         self.hass.async_create_task(self._async_save_data())
-                    
-                    # CASE B: Within window -> ACTIVATE
+
+                    # CASE L: Phase is running (latched) -> Ignore estimate
+                    elif self._preheat_latched:
+                        if order_key != self._latched_order_key:
+                            # Task was replaced/modified externally -> Release the latch;
+                            # The new task will trigger in the next cycle via CASE I,
+                            # if its start_time has already been reached.
+                            _LOGGER.info(
+                                "[%s] Pre-heat order changed while latched. Releasing latch.",
+                                self.room_name,
+                            )
+                            self._preheat_latched = False
+                            self._latched_order_key = None
+                            self._preheat_ignited_at = None
+                            self.data.is_preheating = False
+                        elif self.data.window_open:
+                            # Suspend: Set `Binary` to `False`; the latch remains set.
+                            # Learning anchors are discarded at the bottom of the learning block
+                            # (is_preheating False) -> clean re-anchoring upon resume.
+                            self.data.is_preheating = False
+                        else:
+                            # Main branch: just stay on. Fixes Gap (06:52),
+                            # Hover (07:09–07:12) AND stranded-resume after ventilation.
+                            self.data.is_preheating = True
+                            self.data.desired_temp = self.data.target_temperature
+
+                    # CASE I: Ignition (formerly CASE B) — the only place that
+                    # reads start_time; NEVER again during the current phase.
                     elif now >= start_time:
                         if not self.data.window_open:
+                            self._preheat_latched = True
+                            self._latched_order_key = order_key
+                            self._preheat_ignited_at = now
                             if not self.data.is_preheating:
-                                _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C", self.room_name, self.data.target_temperature)
-                                self._cycle_learned = False          # Latch freigeben
-                                self._heating_start_time = None      # frische Ankerung am Heat-Onset
+                                _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f\u00b0C (latched until %s)",
+                                             self.room_name, self.data.target_temperature,
+                                             target_dt.strftime("%H:%M"))
+                                self._cycle_learned = False          # Release Latch
+                                self._heating_start_time = None      # Fresh Anchoring at Heat Onset
                                 self._heating_start_temp = None
                                 self.hass.async_create_task(
                                     self.async_force_compensation()
@@ -548,8 +619,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                         else:
                             # Window open: track that we should preheat, but don't set temperature
                             self.data.is_preheating = False
-                    
-                    # CASE C: Outside of window
+
+                    # CASE W: Outside the window (not lit) -> wait
                     else:
                         self.data.is_preheating = False
                 else:
@@ -644,7 +715,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # 2. Temperature drop detection
         if self.enable_temp_drop_detection:
-            # Wenn der Sturz erkannt wurde, geben wir True zurück
+            # If a fall was detected, return True
             if self._detect_temperature_drop():
                 _LOGGER.debug("Window open detected by drop in temperature")
                 return True
@@ -791,8 +862,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 new_val,
             )
 
-        # WICHTIG: immer den aktuell berechneten Wert zurückgeben,
-        # nicht _last_reported_mins – sonst springt next_preheat_start.
+        # IMPORTANT: Always return the currently calculated value,
+        # not _last_reported_mins—otherwise, next_preheat_start will jump.
         return new_val
     
     async def async_set_desired_temperature(self, temperature: float) -> None:
@@ -802,7 +873,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         await self.async_calculate_and_apply_compensation(force=True)
 
     async def async_calculate_and_apply_compensation(self, force: bool = False) -> None:
-        """Berechnet die Temperaturkorrektur und sendet sie gerundet an Tado."""
+        """Calculates the temperature correction and sends it, rounded, to Tado."""
         now = dt_util.utcnow()
 
         # 1. Preliminary check: Should anything be sent at all?
@@ -836,7 +907,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         compensated_target = max(5.0, min(25.0, compensated_target))
 
-        # 2. Tolerance check
+        # 3. Tolerance check
         current_tado_target = self.data.tado_target
         diff = abs(compensated_target - current_tado_target)
 
@@ -861,41 +932,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         except Exception as err:
             _LOGGER.error("Error sending to Tado (%s): %s", self.room_name, err)
             
-    def _should_compensate(self) -> bool:
-        """Determine if compensation should be applied."""
-        # Compensation disabled?
-        if not self.data.compensation_enabled:
-            return False
-
-        # Window open (and not overridden)?
-        if self.data.window_open and not self.data.window_override:
-            return False
-
-        # Tolerance check - don't compensate if offset is small
-        if abs(self.data.offset) <= self.tolerance:
-            return False
-
-        # Battery saver checks
-        if self.data.battery_saver_enabled:
-            # Backoff timer
-            if self._last_compensation_time:
-                time_since_last = (dt_util.utcnow() - self._last_compensation_time).total_seconds()
-                if time_since_last < self.backoff_minutes * 60:
-                    return False
-
-            # HVAC action awareness - don't interrupt active heating/cooling
-            compensated = self.data.desired_temp + self.data.offset
-
-            if self.data.hvac_action == "heating" and compensated <= self.data.tado_target:
-                # Already heating to higher temp, don't lower it
-                return False
-
-            if self.data.hvac_action == "idle" and compensated >= self.data.tado_target:
-                # Already idle with lower target, no need to raise
-                return False
-
-        return True
-
     async def async_force_compensation(self) -> None:
         """Force compensation, bypassing all checks except window."""
         # Still respect window detection unless overridden
@@ -937,11 +973,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
     def _calculate_instant_heating_rate(self, current_external_temp: float) -> float | None:
         """Measure the heating rates ONLY in the preheat mode (one sample per phase)."""
-        # Gate: Nur während aktiver Preheat-Phase lernen
+        # Gate: Learn only during the active preheat phase
         if not self.data.is_preheating:
             return None
-        # Latch: Nur EIN Sample pro Phase — Repeated Sampling verfälscht
-        # die History Richtung Spätphasen-Raten (Delta schrumpft -> Rate sinkt)
+        # Latch: Only ONE sample per phase — repeated sampling distorts
+        # the history toward late-phase rates (delta shrinks -> rate decreases)
         if self._cycle_learned:
             return None
 
@@ -968,7 +1004,6 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # 1. DEFINE VARIABLES
         temp_diff = current_external_temp - self._heating_start_temp
         instant_rate = temp_diff / duration_hrs
-        duration_mins = duration_hrs * 60
 
         # 2. FILTER (to prevent too small/wrong numbers)
         if duration_hrs < 0.25 or temp_diff < 0.2 or instant_rate < 0.4:
@@ -978,7 +1013,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             )
             return None
 
-        # 3. SECURITY-FILTEER
+        # 3. SECURITY-FILTER
         if instant_rate > MAX_HEATING_RATE:
             _LOGGER.info(
                 "Ignore outliers in  %s: %.2f °C/h (Max: %.1f)", 
@@ -1003,20 +1038,20 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         return instant_rate
 
     def _calculate_instant_cooling_rate(self, current_temp: float) -> float | None:
-        """Lernt die Abkühlrate aus Phasen ohne aktives Heizen (fallspezifisch)."""
+        """Determine the cooling rate from phases without active heating (case-specific)."""
         if self._cooling_start_time is None or self._cooling_start_temp is None:
             return None
 
         duration_hrs = (dt_util.utcnow() - self._cooling_start_time).total_seconds() / 3600
         temp_diff = self._cooling_start_temp - current_temp  # positiv = Abkühlung
 
-        # Sammelphase: Kriterien noch nicht erfüllt -> weiter beobachten
+        # Accumulation phase: Criteria not yet met -> continue monitoring
         if duration_hrs < COOLING_MIN_DURATION_HRS or temp_diff < COOLING_MIN_DELTA:
             return None
 
         instant_rate = temp_diff / duration_hrs
 
-        # Plausibilisierung: schnelle Abfälle sind Lüftung/Tür, kein thermischer Verlust
+        # Plausibility check: Rapid heat loss occurs through ventilation and doors, not thermal loss
         if instant_rate > MAX_COOLING_RATE:
             _LOGGER.debug(
                 "[%s] Cooling cycle ignored - rate %.2f°C/h exceeds max %.1f (likely ventilation)",
@@ -1069,8 +1104,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             order = stored_data["preheat_order"]
             raw_time = order.get("target_time")
             if raw_time is not None:
-                # Store/JSON serialisiert datetime.time zu einem String (ISO-Format),
-                # deshalb muessen wir ihn nach dem Laden zurueckwandeln:
+                # Store/JSON serializes `datetime.time` into a string (ISO format),
+                # so we need to deserialize it after loading:
                 if isinstance(raw_time, str):
                     parsed = dt_util.parse_time(raw_time)
                     if parsed is None:
