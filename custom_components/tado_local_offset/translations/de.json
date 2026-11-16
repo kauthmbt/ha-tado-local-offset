@@ -23,7 +23,8 @@
           "tado_climate_entity": "Tado Klima-Entität",
           "tado_temp_sensor": "Tado interner Sensor",
           "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)",
-          "weather_sensor": "Wetter-Entität (für Vorheiz-Korrektur)"
+          "weather_sensor": "Wetter-Entität (für Vorheiz-Korrektur)",
+          "solar_sensor": "Solar-Sensor (proaktiv)"
         }
       },
       "window_detection": {
@@ -35,6 +36,13 @@
           "window_open_delay": "Verzögerung beim Öffnen (Sekunden)",
           "enable_temp_drop_detection": "Erkennung von Temperaturabfall",
           "temp_drop_threshold": "Abfall-Limit (°C)"
+        },
+        "data_description": {
+          "tado_climate_entity": "Die Klima-Entität des Tado-Thermostats",
+          "tado_temp_sensor": "Interner Temperatursensor des Thermostats",
+          "tado_humidity_sensor": "Optional – für diagnostische Zwecke",
+          "solar_sensor": "Optional – prognostische Offset-Korrektur bei Sonneneinstrahlung",
+          "weather_sensor": "Optional – Wetter-Entität für die Vorheiz-Korrektur"
         }
       },
       "advanced_settings": {
@@ -73,7 +81,8 @@
     "switch": {
       "battery_saver": { "name": "Batteriesparmodus" },
       "window_override": { "name": "Fenster-Übersteuerung" },
-      "compensation_enabled": { "name": "Kompensation aktiviert" }
+      "compensation_enabled": { "name": "Kompensation aktiviert" },
+	  "saturation_guard": { "name": "Sättigungsschutz" }
     },
     "number": {
       "desired_temperature": { "name": "Solltemperatur" },
@@ -87,7 +96,7 @@
       "preheat_time": { "name": "Vorheiz-Dauer" },
       "compensated_target": { "name": "Kompensiertes Ziel" },
       "last_compensation": { "name": "Letzte Korrektur" },
-	  "cooling_rate": { "name": "Abkühlrate" },
+      "cooling_rate": { "name": "Abkühlrate" },
       "next_preheat": { "name": "Nächster Vorheiz-Start" }
     }
   },
@@ -124,7 +133,11 @@
           "learning_buffer": "Zeit-Puffer (%)",
           "min_preheat_minutes": "Min. Vorheizzeit (Min)",
           "max_preheat_minutes": "Max. Vorheizzeit (Min)",
-          "max_heating_cycles": "Max. Lernzyklen (Historie)"
+          "max_heating_cycles": "Max. Lernzyklen (Historie)",
+          "enable_saturation_guard": "Sättigungsschutz (Offset einfrieren)"
+        },
+        "data_description": {
+          "enable_saturation_guard": "Friert den gelernten Offset ein, wenn der Raum nicht mehr auf weitere Sollwert-Erhöhungen reagiert (Ventil voll offen). Verhindert Überschwingen nach Ende der Sättigungsphase."
         }
       }
     }

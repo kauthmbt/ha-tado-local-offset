@@ -23,7 +23,8 @@
           "tado_climate_entity": "Tado climate entity",
           "tado_temp_sensor": "Tado internal sensor",
           "tado_humidity_sensor": "Tado humidity (optional)",
-          "weather_sensor": "Weather entity (for preheat correction)"
+          "weather_sensor": "Weather entity (for preheat correction)",
+          "solar_sensor": "Solar sensor (proactive)"
         }
       },
       "window_detection": {
@@ -73,7 +74,8 @@
     "switch": {
       "battery_saver": { "name": "Battery saver" },
       "window_override": { "name": "Window override" },
-      "compensation_enabled": { "name": "Compensation enabled" }
+      "compensation_enabled": { "name": "Compensation enabled" },
+      "saturation_guard": { "name": "Saturation guard" }
     },
     "number": {
       "desired_temperature": { "name": "Desired temperature" },
@@ -87,7 +89,7 @@
       "preheat_time": { "name": "Preheat duration" },
       "compensated_target": { "name": "Compensated target" },
       "last_compensation": { "name": "Last compensation" },
-	  "cooling_rate": { "name": "Cooling rate" }, 
+      "cooling_rate": { "name": "Cooling rate" }, 
       "next_preheat": { "name": "Next preheat start" }
     }
   },
@@ -124,7 +126,11 @@
           "learning_buffer": "Time buffer (%)",
           "min_preheat_minutes": "Min. preheat time (min)",
           "max_preheat_minutes": "Max. preheat time (min)",
-          "max_heating_cycles": "Max. learning cycles (history)"
+          "max_heating_cycles": "Max. learning cycles (history)",
+          "enable_saturation_guard": "Saturation guard (freeze offset)"
+        },
+        "data_description": {
+          "enable_saturation_guard": "Freezes the learned offset when the room stops responding to further target increases (valve fully open). Prevents overshoot after the saturated phase ends."
         }
       }
     }
