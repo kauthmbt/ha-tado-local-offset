@@ -20,7 +20,8 @@ from .const import (
     DEFAULT_BACKOFF_MINUTES, DEFAULT_LEARNING_BUFFER, DEFAULT_MAX_PREHEAT_MINUTES,
     DEFAULT_MIN_PREHEAT_MINUTES, DEFAULT_TEMP_DROP_THRESHOLD, DEFAULT_TOLERANCE,
     DOMAIN, MAX_BACKOFF, MAX_TOLERANCE, MIN_BACKOFF, MIN_TOLERANCE, CONF_WINDOW_OPEN_DELAY, DEFAULT_WINDOW_OPEN_DELAY,
-    CONF_MAX_HEATING_CYCLES, CONF_OUTSIDE_TEMP_SENSOR, DEFAULT_MAX_HEATING_CYCLES
+    CONF_MAX_HEATING_CYCLES, CONF_OUTSIDE_TEMP_SENSOR, DEFAULT_MAX_HEATING_CYCLES,
+    CONF_ENABLE_SATURATION_GUARD
     
 )
 
@@ -202,6 +203,7 @@ class TadoLocalOffsetOptionsFlowHandler(config_entries.OptionsFlow):
             vol.Optional(CONF_MAX_HEATING_CYCLES, default=self.options.get(CONF_MAX_HEATING_CYCLES, DEFAULT_MAX_HEATING_CYCLES)): vol.All(
                 vol.Coerce(int), vol.Range(min=5, max=50)
             ),
+            vol.Optional(CONF_ENABLE_SATURATION_GUARD, default=self.options.get(CONF_ENABLE_SATURATION_GUARD, False)): bool,
         }
 
         # Only set a default if an entity is actually stored!

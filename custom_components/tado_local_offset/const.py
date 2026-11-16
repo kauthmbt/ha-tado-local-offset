@@ -39,6 +39,7 @@ CONF_SOLAR_SENSOR: Final = "solar_sensor"
 CONF_WEATHER_SENSOR: Final = "weather_sensor"
 CONF_OUTSIDE_TEMP_SENSOR: Final = "outside_temp_sensor"
 CONF_MAX_HEATING_CYCLES: Final = "max_heating_cycles"
+CONF_ENABLE_SATURATION_GUARD: Final = "enable_saturation_guard"
 
 # Default values
 DEFAULT_TEMP_DROP_THRESHOLD: Final = 1.0
@@ -91,6 +92,12 @@ ATTR_LAST_COMPENSATION: Final = "last_compensation"
 ATTR_WINDOW_OPEN: Final = "window_open"
 ATTR_COMPENSATION_ACTIVE: Final = "compensation_active"
 ATTR_IS_PREHEATING: Final = "is_preheating"
+
+# Saturation Guard (offset windup protection when actuator range is exhausted)
+SAT_GUARD_WINDOW_MINUTES: Final = 15   # observation window for the slope
+SAT_GUARD_MIN_DURATION_HRS: Final = 0.25  # minimum window span before judging
+SAT_GUARD_MAX_SLOPE: Final = 0.1      # °C/h – below this the room counts as "stalled"
+SAT_GUARD_MIN_GAP: Final = 0.3        # °C – target must be at least this far away
 
 # Service names
 SERVICE_FORCE_COMPENSATION: Final = "force_compensation"

@@ -27,7 +27,7 @@ class TadoLocalOffsetSwitchDescription(SwitchEntityDescription):
 SWITCHES: tuple[TadoLocalOffsetSwitchDescription, ...] = (
     TadoLocalOffsetSwitchDescription(
         key="battery_saver",
-        translation_key="battery_saver", 
+        translation_key="battery_saver",
         icon="mdi:battery",
         entity_category=EntityCategory.CONFIG,
         set_fn=lambda coord, value: coord.set_battery_saver(value),
@@ -35,7 +35,7 @@ SWITCHES: tuple[TadoLocalOffsetSwitchDescription, ...] = (
     ),
     TadoLocalOffsetSwitchDescription(
         key="window_override",
-        translation_key="window_override", 
+        translation_key="window_override",
         icon="mdi:window-open-variant",
         entity_category=EntityCategory.CONFIG,
         set_fn=lambda coord, value: coord.set_window_override(value),
@@ -48,6 +48,14 @@ SWITCHES: tuple[TadoLocalOffsetSwitchDescription, ...] = (
         entity_category=EntityCategory.CONFIG,
         set_fn=lambda coord, value: coord.set_compensation_enabled(value),
         get_fn=lambda coord: coord.data.compensation_enabled,
+    ),
+    TadoLocalOffsetSwitchDescription(
+        key="saturation_guard",
+        translation_key="saturation_guard",
+        icon="mdi:speedometer-slow",
+        entity_category=EntityCategory.CONFIG,
+        set_fn=lambda coord, value: coord.set_saturation_guard(value),
+        get_fn=lambda coord: coord.data.saturation_guard_enabled,
     ),
 )
 

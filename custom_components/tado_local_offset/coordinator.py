@@ -64,6 +64,11 @@ from .const import (
     TEMP_DROP_WINDOW_MINUTES,
     UPDATE_INTERVAL,
     CONF_WINDOW_OPEN_DELAY,
+    CONF_ENABLE_SATURATION_GUARD,      # <<< NEW: Saturation Guard (v14)
+    SAT_GUARD_WINDOW_MINUTES,          # <<< NEW
+    SAT_GUARD_MIN_DURATION_HRS,        # <<< NEW
+    SAT_GUARD_MAX_SLOPE,               # <<< NEW
+    SAT_GUARD_MIN_GAP,                 # <<< NEW
 )
 
 STORAGE_KEY = f"{DOMAIN}_storage"
@@ -157,6 +162,7 @@ class TadoLocalOffsetData:
     window_override: bool = False
     target_time: Any | None = None
     target_temperature: float = 0.0
+    saturation_guard_enabled: bool = False
     
     # This is a special marker for Python 3.13.
     _: KW_ONLY 
@@ -246,11 +252,23 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._latched_order_key: tuple | None = None
         self._preheat_ignited_at: datetime | None = None
 
+        # --- Saturation Guard (v14) ---
+        # Prevents offset windup when the valve is saturated (room stops
+        # responding to further increases of the compensated target).
+        self.enable_saturation_guard = entry.options.get(
+            CONF_ENABLE_SATURATION_GUARD,
+            entry.data.get(CONF_ENABLE_SATURATION_GUARD, False),
+        )
+        self._sat_history: list[tuple[datetime, float]] = []
+        self._sat_frozen_offset: float | None = None
+
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
 
         # Initialize data
         self.data = TadoLocalOffsetData()
+        
+        self.data.saturation_guard_enabled = self.enable_saturation_guard
 
         self.data.battery_saver_enabled = entry.options.get(
             CONF_ENABLE_BATTERY_SAVER, 
@@ -405,6 +423,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                     "[%s] Temps updated. External (Filtered): %.2f°C, Solar-Mod: %.2f°C, Final Offset: %.2f", 
                     self.room_name, filtered_external_temp, solar_modifier, self.data.offset
                 )
+                self._evaluate_saturation_freeze()
                     
             except (ValueError, TypeError) as err:
                 _LOGGER.error("Error parsing temperature for %s: %s", self.room_name, err)
@@ -748,6 +767,72 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             drop_rate > TEMP_DROP_RATE_THRESHOLD
         )
 
+    def _evaluate_saturation_freeze(self) -> None:
+        """Freeze the offset while the heating actuator range is exhausted.
+
+        Core idea: if the compensated target has already been raised but the
+        filtered room temperature shows no measurable movement over
+        SAT_GUARD_WINDOW_MINUTES, lowering the offset further achieves
+        nothing – it only cements the tado_temp drift (radiant heat at the
+        valve body) that later resurfaces as overshoot once the saturated
+        phase ends.
+        """
+        if not self.enable_saturation_guard:
+            if self._sat_frozen_offset is not None:
+                self._sat_frozen_offset = None
+            return
+
+        now = dt_util.utcnow()
+        self._sat_history.append((now, self.data.external_temp))
+        cutoff = now - timedelta(minutes=SAT_GUARD_WINDOW_MINUTES)
+        self._sat_history = [(t, v) for t, v in self._sat_history if t > cutoff]
+
+        if len(self._sat_history) < 2:
+            return
+
+        span_hrs = (self._sat_history[-1][0] - self._sat_history[0][0]).total_seconds() / 3600
+        if span_hrs < SAT_GUARD_MIN_DURATION_HRS:
+            # Window too short for a reliable verdict
+            if self._sat_frozen_offset is not None:
+                _LOGGER.debug(
+                    "[%s] Sat-Guard: window too short (%.0f min), releasing freeze",
+                    self.room_name, span_hrs * 60,
+                )
+                self._sat_frozen_offset = None
+            return
+
+        slope = (self._sat_history[-1][1] - self._sat_history[0][1]) / span_hrs
+        gap = self.data.desired_temp - (self.data.external_temp or 0.0)
+
+        stalled = abs(slope) < SAT_GUARD_MAX_SLOPE
+        near_target = gap <= SAT_GUARD_MIN_GAP
+
+        if stalled and not near_target and self.data.hvac_action == "heating":
+            if self._sat_frozen_offset is None:
+                self._sat_frozen_offset = self.data.offset
+                _LOGGER.info(
+                    "[%s] Saturation suspected: no movement (%.2f°C/h over %.0f min) "
+                    "with %.2f°C to target -> freezing offset at %.2f",
+                    self.room_name, slope, span_hrs * 60, gap, self._sat_frozen_offset,
+                )
+        elif self._sat_frozen_offset is not None:
+            _LOGGER.info(
+                "[%s] Sat-Guard released: slope %.2f°C/h, gap %.2f°C, action %s",
+                self.room_name, slope, gap, self.data.hvac_action,
+            )
+            self._sat_frozen_offset = None
+
+        if self._sat_frozen_offset is not None:
+            # Freeze = do not let the offset sink any further (the direction
+            # that increases pressure). max() covers both offset signs,
+            # because the compensated target rises whenever the offset falls.
+            raw_offset = self.data.offset
+            self.data.offset = max(raw_offset, self._sat_frozen_offset)
+            if self.data.offset != raw_offset:
+                _LOGGER.debug(
+                    "[%s] Sat-Guard active: raw offset %.2f -> held at %.2f",
+                    self.room_name, raw_offset, self.data.offset,
+                )
 
     async def _calculate_preheat_minutes(self, target_temp: float | None = None, target_dt: datetime | None = None) -> int:
         """Calculate minutes needed to reach desired temperature."""
@@ -970,6 +1055,13 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
     def set_window_override(self, override: bool) -> None:
         """Set window detection override."""
         self.data.window_override = override
+    
+    def set_saturation_guard(self, enabled: bool) -> None:
+        """Enable or disable the saturation guard at runtime."""
+        self.data.saturation_guard_enabled = enabled
+        self.enable_saturation_guard = enabled
+        if not enabled:
+            self._sat_frozen_offset = None
 
     def _calculate_instant_heating_rate(self, current_external_temp: float) -> float | None:
         """Measure the heating rates ONLY in the preheat mode (one sample per phase)."""
