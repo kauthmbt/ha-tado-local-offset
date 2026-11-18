@@ -163,31 +163,37 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             """Current effective value: options first, then data."""
             return entry.options.get(key, entry.data.get(key))
 
+        # Required keys always carry a value -> safe to use as default
+        schema = {
+            vol.Required(CONF_EXTERNAL_TEMP_SENSOR, default=_cur(CONF_EXTERNAL_TEMP_SENSOR)): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            ),
+            vol.Required(CONF_TADO_CLIMATE_ENTITY, default=_cur(CONF_TADO_CLIMATE_ENTITY)): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="climate")
+            ),
+            vol.Required(CONF_TADO_TEMP_SENSOR, default=_cur(CONF_TADO_TEMP_SENSOR)): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+            ),
+        }
+
+        # Optional keys: only set a default if an entity is actually stored.
+        # default=None would make the frontend validate "None" as an entity ID
+        # -> "Entity None is neither a valid entity ID nor a valid UUID".
+        for key, sel_cfg in (
+            (CONF_TADO_HUMIDITY_SENSOR, selector.EntitySelectorConfig(domain="sensor", device_class="humidity")),
+            (CONF_SOLAR_SENSOR, selector.EntitySelectorConfig(domain="sensor")),
+            (CONF_WEATHER_SENSOR, selector.EntitySelectorConfig(domain="weather")),
+            (CONF_OUTSIDE_TEMP_SENSOR, selector.EntitySelectorConfig(domain="sensor", device_class="temperature")),
+        ):
+            current = _cur(key)
+            if current:
+                schema[vol.Optional(key, default=current)] = selector.EntitySelector(sel_cfg)
+            else:
+                schema[vol.Optional(key)] = selector.EntitySelector(sel_cfg)
+
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=vol.Schema({
-                vol.Required(CONF_EXTERNAL_TEMP_SENSOR, default=_cur(CONF_EXTERNAL_TEMP_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-                ),
-                vol.Required(CONF_TADO_CLIMATE_ENTITY, default=_cur(CONF_TADO_CLIMATE_ENTITY)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="climate")
-                ),
-                vol.Required(CONF_TADO_TEMP_SENSOR, default=_cur(CONF_TADO_TEMP_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-                ),
-                vol.Optional(CONF_TADO_HUMIDITY_SENSOR, default=_cur(CONF_TADO_HUMIDITY_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-                ),
-                vol.Optional(CONF_SOLAR_SENSOR, default=_cur(CONF_SOLAR_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor")
-                ),
-                vol.Optional(CONF_WEATHER_SENSOR, default=_cur(CONF_WEATHER_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="weather")
-                ),
-                vol.Optional(CONF_OUTSIDE_TEMP_SENSOR, default=_cur(CONF_OUTSIDE_TEMP_SENSOR)): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-                ),
-            }),
+            data_schema=vol.Schema(schema),
             errors=errors,
         )
     @staticmethod
