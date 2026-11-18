@@ -107,6 +107,89 @@ class TadoLocalOffsetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
             }),
         )
+
+    # Sensor keys that may be changed via reconfigure. The coordinator resolves
+    # solar/weather/outside sensors per-cycle from options-first -> data, so any
+    # key already present in options must be updated there as well.
+    _RECONFIGURABLE_SENSOR_KEYS = (
+        CONF_EXTERNAL_TEMP_SENSOR,
+        CONF_TADO_CLIMATE_ENTITY,
+        CONF_TADO_TEMP_SENSOR,
+        CONF_TADO_HUMIDITY_SENSOR,
+        CONF_SOLAR_SENSOR,
+        CONF_WEATHER_SENSOR,
+        CONF_OUTSIDE_TEMP_SENSOR,
+    )
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Reconfigure: change sensor entities after setup, e.g. when the
+        HomeKit thermostat or its sensors were renamed."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # Normalize empty optional selections to None (same convention
+            # as async_step_advanced_settings)
+            for key in (
+                CONF_TADO_HUMIDITY_SENSOR,
+                CONF_SOLAR_SENSOR,
+                CONF_WEATHER_SENSOR,
+                CONF_OUTSIDE_TEMP_SENSOR,
+            ):
+                if key in user_input and not user_input[key]:
+                    user_input[key] = None
+
+            # Merge new sensor values into entry.data
+            new_data = {**entry.data, **user_input}
+
+            # Keys already present in options keep taking precedence in the
+            # coordinator -> sync them there too (drop them when cleared).
+            new_options = dict(entry.options)
+            for key in self._RECONFIGURABLE_SENSOR_KEYS:
+                if key in new_options:
+                    if user_input.get(key):
+                        new_options[key] = user_input[key]
+                    else:
+                        new_options.pop(key, None)
+
+            self.hass.config_entries.async_update_entry(
+                entry, data=new_data, options=new_options
+            )
+            # HA reloads the entry automatically after a successful
+            # reconfigure flow -> coordinator re-reads the new entity IDs.
+            return self.async_abort(reason="reconfigure_successful")
+
+        def _cur(key: str) -> Any:
+            """Current effective value: options first, then data."""
+            return entry.options.get(key, entry.data.get(key))
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema({
+                vol.Required(CONF_EXTERNAL_TEMP_SENSOR, default=_cur(CONF_EXTERNAL_TEMP_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Required(CONF_TADO_CLIMATE_ENTITY, default=_cur(CONF_TADO_CLIMATE_ENTITY)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
+                ),
+                vol.Required(CONF_TADO_TEMP_SENSOR, default=_cur(CONF_TADO_TEMP_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Optional(CONF_TADO_HUMIDITY_SENSOR, default=_cur(CONF_TADO_HUMIDITY_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                ),
+                vol.Optional(CONF_SOLAR_SENSOR, default=_cur(CONF_SOLAR_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor")
+                ),
+                vol.Optional(CONF_WEATHER_SENSOR, default=_cur(CONF_WEATHER_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="weather")
+                ),
+                vol.Optional(CONF_OUTSIDE_TEMP_SENSOR, default=_cur(CONF_OUTSIDE_TEMP_SENSOR)): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+            }),
+            errors=errors,
+        )
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> TadoLocalOffsetOptionsFlowHandler:

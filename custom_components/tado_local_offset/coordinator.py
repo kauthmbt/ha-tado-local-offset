@@ -430,7 +430,21 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 return self.data
 
             # Update data
-            self.data.tado_target = float(tado_climate_state.attributes.get("temperature", DEFAULT_DESIRED_TEMP))
+            # The target temperature attribute can legitimately be None when
+            # the Tado/HomeKit entity is switched off (no active setpoint).
+            # Skip this cycle gracefully instead of crashing the whole update
+            # (float(None) would raise TypeError -> UpdateFailed -> setup retry).
+            raw_tado_target = tado_climate_state.attributes.get("temperature")
+            if raw_tado_target is None:
+                _LOGGER.debug(
+                    "[%s] Tado climate entity has no target temperature "
+                    "(state: %s) – skipping cycle until setpoint is available",
+                    self.room_name,
+                    str(tado_climate_state.state),
+                )
+                return self.data
+
+            self.data.tado_target = float(raw_tado_target)
             raw_state = str(tado_climate_state.state).lower()
             
             if raw_state == "off":
