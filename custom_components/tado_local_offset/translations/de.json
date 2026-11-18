@@ -59,7 +59,32 @@
           "max_preheat_minutes": "Max. Vorheizzeit (Min)",
           "max_heating_cycles": "Max. Lernzyklen (Historie)"
         }
+      },
+	  "reconfigure": {
+        "title": "Sensoren ändern",
+        "description": "Sensor-Entitäten für diesen Raum aktualisieren, z. B. nach Umbenennung des HomeKit-Thermostats.",
+        "data": {
+          "external_temp_sensor": "Externer Temperatursensor",
+          "tado_climate_entity": "Tado Klima-Entität",
+          "tado_temp_sensor": "Tado interner Sensor",
+          "tado_humidity_sensor": "Tado Luftfeuchtigkeit (optional)",
+          "solar_sensor": "Solar-Sensor (proaktiv)",
+          "weather_sensor": "Wetter-Entität (für Vorheiz-Korrektur)",
+          "outside_temp_sensor": "Außen-Temperatursensor"
+        },
+        "data_description": {
+          "external_temp_sensor": "Der Sensor, der die 'echte' Raumtemperatur liefert",
+          "tado_climate_entity": "Die Klima-Entität des Tado-Thermostats",
+          "tado_temp_sensor": "Interner Temperatursensor des Thermostats",
+          "tado_humidity_sensor": "Optional – für diagnostische Zwecke",
+          "solar_sensor": "Optional – prognostische Offset-Korrektur bei Sonneneinstrahlung",
+          "weather_sensor": "Optional – Wetter-Entität für die Vorheiz-Korrektur",
+          "outside_temp_sensor": "Optional – bevorzugt vor der Wetter-Entität"
+        }
       }
+    },
+    "abort": {
+      "reconfigure_successful": "Konfiguration aktualisiert."
     }
   },
   "entity": {
