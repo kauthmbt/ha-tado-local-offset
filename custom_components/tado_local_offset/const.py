@@ -94,7 +94,7 @@ ATTR_COMPENSATION_ACTIVE: Final = "compensation_active"
 ATTR_IS_PREHEATING: Final = "is_preheating"
 
 # Saturation Guard (offset windup protection when actuator range is exhausted)
-SAT_GUARD_WINDOW_MINUTES: Final = 15   # observation window for the slope
+SAT_GUARD_WINDOW_MINUTES: Final = 20   # observation window for the slope
 SAT_GUARD_MIN_DURATION_HRS: Final = 0.25  # minimum window span before judging
 SAT_GUARD_MAX_SLOPE: Final = 0.1      # °C/h – below this the room counts as "stalled"
 SAT_GUARD_MIN_GAP: Final = 0.3        # °C – target must be at least this far away
