@@ -418,7 +418,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                 # Ground floor/upper floors: Subtracts the solar value; Tado closes the valve earlier
                 self.data.offset = filtered_external_temp - tado_temp + solar_modifier
                 
-                _LOGGER.info(
+                _LOGGER.debug(
                     "[%s] Temps updated. External (Filtered): %.2f°C, Solar-Mod: %.2f°C, Final Offset: %.2f", 
                     self.room_name, filtered_external_temp, solar_modifier, self.data.offset
                 )
@@ -637,9 +637,10 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                             self._latched_order_key = order_key
                             self._preheat_ignited_at = now
                             if not self.data.is_preheating:
-                                _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f\u00b0C (latched until %s)",
+                                _ignition_delta = self.data.target_temperature - (self.data.external_temp or 0.0)
+                                _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C, DeltaT: %.2f°C (latched until %s)",
                                              self.room_name, self.data.target_temperature,
-                                             target_dt.strftime("%H:%M"))
+                                             _ignition_delta, target_dt.strftime("%H:%M"))
                                 self._cycle_learned = False          # Release Latch
                                 self._heating_start_time = None      # Fresh Anchoring at Heat Onset
                                 self._heating_start_temp = None
@@ -1143,9 +1144,12 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self.hass.async_create_task(self._async_save_data())
 
         _LOGGER.info(
-            "[%s] Heating cycle completed. Rate: %.2f°C/h (avg of %d cycles: %.2f°C/h). Data has been processed.",
+            "[%s] Heating cycle completed. Rate: %.2f°C/h (avg of %d cycles: %.2f°C/h), "
+            "started at %.1f°C, ignition DeltaT: %.2f°C",
             self.room_name, instant_rate,
             len(self.data.heating_history), self.data.heating_rate,
+            self._heating_start_temp,
+            (self.data.target_temperature or 0.0) - (self._heating_start_temp or 0.0),
         )
         return instant_rate
 
