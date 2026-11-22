@@ -55,7 +55,6 @@ from .const import (
     MAX_HEATING_RATE,
     MAX_OFFSET,
     MAX_TEMP,
-    MIN_HEATING_RATE,
     MIN_TEMP,
     MAX_COOLING_RATE,
     COOLING_MIN_DURATION_HRS,
@@ -992,9 +991,16 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # 2. Calculate target value with “hard braking”
         if self.data.external_temp >= self.data.desired_temp:
             compensated_target = float(self.data.desired_temp)
-            _LOGGER.debug("%s: Target reached (%.1f >= %.1f). Fix at %.1f", 
-                         self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target)
-            
+            if self.data.desired_temp <= MIN_TEMP + 0.5:
+                # Frost protection (5.0°C) – "Target reached" would be misleading here
+                _LOGGER.debug(
+                    "%s: Frost protection active (room %.1f >= %.1f). Holding %.1f",
+                    self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target,
+                )
+            else:
+                _LOGGER.debug("%s: Target reached (%.1f >= %.1f). Fix at %.1f",
+                             self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target)
+
             force_send_due_to_target_reached = True
         else:
             raw_target = self.data.desired_temp - self.data.offset
@@ -1122,7 +1128,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # 3. SECURITY-FILTER
         if instant_rate > MAX_HEATING_RATE:
             _LOGGER.info(
-                "Ignore outliers in  %s: %.2f °C/h (Max: %.1f)", 
+                "Ignore outliers in %s: %.2f °C/h (Max: %.1f)", 
                 self.room_name, instant_rate, MAX_HEATING_RATE
             )
             return None
@@ -1148,8 +1154,18 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if self._cooling_start_time is None or self._cooling_start_temp is None:
             return None
 
-        duration_hrs = (dt_util.utcnow() - self._cooling_start_time).total_seconds() / 3600
-        temp_diff = self._cooling_start_temp - current_temp  # positiv = Abkühlung
+        # Defensive redundancy: The call site already rejects window-open and
+        # the calm phase. This second check mirrors the heating-rate function
+        # and protects the sample if this method is ever called elsewhere.
+        now = dt_util.utcnow()
+        if (
+            self._window_closed_at is not None
+            and (now - self._window_closed_at).total_seconds() < 15 * 60
+        ):
+            return None
+
+        duration_hrs = (now - self._cooling_start_time).total_seconds() / 3600
+        temp_diff = self._cooling_start_temp - current_temp  # positive = cooling
 
         # Accumulation phase: Criteria not yet met -> continue monitoring
         if duration_hrs < COOLING_MIN_DURATION_HRS or temp_diff < COOLING_MIN_DELTA:
