@@ -637,6 +637,22 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                             self._latched_order_key = order_key
                             self._preheat_ignited_at = now
                             if not self.data.is_preheating:
+                                # Reset the stall evaluation: the Sat-Guard window
+                                # must not contain pre-ignition idle readings.
+                                # A quiet night (0.00°C/h slope) would otherwise
+                                # trigger a false freeze right after every ignition.
+                                self._sat_history.clear()
+                                # Release any freeze acquired from pre-ignition
+                                # data so the early preheat phase gets the full
+                                # actuator pressure until fresh (post-ignition)
+                                # data justifies a new verdict.
+                                if self._sat_frozen_offset is not None:
+                                    _LOGGER.info(
+                                        "[%s] Sat-Guard: releasing pre-ignition freeze "
+                                        "at %.2f (stall data reset at ignition)",
+                                        self.room_name, self._sat_frozen_offset,
+                                    )
+                                    self._sat_frozen_offset = None
                                 _ignition_delta = self.data.target_temperature - (self.data.external_temp or 0.0)
                                 _LOGGER.info("[%s] Pre-heat phase started. Target: %.1f°C, DeltaT: %.2f°C (latched until %s)",
                                              self.room_name, self.data.target_temperature,
