@@ -98,6 +98,7 @@ SAT_GUARD_WINDOW_MINUTES: Final = 20   # observation window for the slope
 SAT_GUARD_MIN_DURATION_HRS: Final = 0.25  # minimum window span before judging
 SAT_GUARD_MAX_SLOPE: Final = 0.1      # °C/h – below this the room counts as "stalled"
 SAT_GUARD_MIN_GAP: Final = 0.3        # °C – target must be at least this far away
+SAT_GUARD_GRACE_MINUTES = 30        # <<< NEW: warm-up grace after preheat ignition
 
 # Service names
 SERVICE_FORCE_COMPENSATION: Final = "force_compensation"
@@ -115,4 +116,4 @@ STORAGE_VERSION: Final = 1
 # Device info
 MANUFACTURER: Final = "Tado Local Offset"
 MODEL: Final = "Virtual Thermostat"
-VERSION: Final = "2026.11.2-beta10"
+VERSION: Final = "2026.11.2-beta11"

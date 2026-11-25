@@ -68,6 +68,7 @@ from .const import (
     SAT_GUARD_MIN_DURATION_HRS,        # <<< NEW
     SAT_GUARD_MAX_SLOPE,               # <<< NEW
     SAT_GUARD_MIN_GAP,                 # <<< NEW
+    SAT_GUARD_GRACE_MINUTES,           # <<< NEW
 )
 
 STORAGE_KEY = f"{DOMAIN}_storage"
@@ -260,7 +261,9 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
         self._sat_history: list[tuple[datetime, float]] = []
         self._sat_frozen_offset: float | None = None
-
+        # <<< NEW: No stall verdict until the actuator/radiator warm-up has
+        # had a fair chance to reach the external sensor (UTC-based).
+        self._sat_grace_until: datetime | None = None
         # Cooldown after compensation to let HomeKit state propagate (seconds)
         self._external_change_cooldown: float = 90.0
 
@@ -636,6 +639,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                             self._preheat_latched = True
                             self._latched_order_key = order_key
                             self._preheat_ignited_at = now
+                            # <<< NEW: Start the Sat-Guard grace period at
+                            # ignition (UTC, matching _evaluate_saturation_freeze).
+                            self._sat_grace_until = dt_util.utcnow() + timedelta(
+                                minutes=SAT_GUARD_GRACE_MINUTES
+                            )
                             if not self.data.is_preheating:
                                 # Reset the stall evaluation: the Sat-Guard window
                                 # must not contain pre-ignition idle readings.
@@ -817,6 +825,19 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         cutoff = now - timedelta(minutes=SAT_GUARD_WINDOW_MINUTES)
         self._sat_history = [(t, v) for t, v in self._sat_history if t > cutoff]
 
+        # <<< NEW: Grace period after preheat ignition. Valve actuation,
+        # radiator warm-up and the Kalman lag make any stall verdict
+        # physically unreliable in the first minutes of a heating phase.
+        # Collect data, but don't judge yet.
+        if self._sat_grace_until is not None and now < self._sat_grace_until:
+            if self._sat_frozen_offset is not None:
+                _LOGGER.debug(
+                    "[%s] Sat-Guard: freeze released during grace period",
+                    self.room_name,
+                )
+                self._sat_frozen_offset = None
+            return
+
         if len(self._sat_history) < 2:
             return
 
@@ -966,16 +987,20 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             or (new_val == 0 and self._last_reported_mins > 0)
         ):
             self._last_reported_mins = new_val
-            _LOGGER.info(
-                "PREHEAT-ADJUST [%s]: Delta %.2f\u00b0C (Target %.1f, Cool +%.2f\u00b0C @ rate %.2f) -> WF %.2f (out: %s) / dyn WF %.2f -> %d Min",
-                self.room_name, room_delta, check_temp,
-                (self.data.cooling_rate or 0.0) * cool_lead_hrs,
-                self.data.cooling_rate or 0.0,
-                weather_factor,
-                f"{out_temp:.1f}" if out_temp is not None else "n/a",
-                weather_factor_dynamic,
-                new_val,
-            )
+            # <<< NEW: While the preheat phase is latched, the recomputed
+            # estimate is ignored by the state machine anyway -> suppress
+            # the 30-second countdown flood in the INFO log.
+            if not self._preheat_latched:
+                _LOGGER.info(
+                    "PREHEAT-ADJUST [%s]: Delta %.2f\u00b0C (Target %.1f, Cool +%.2f\u00b0C @ rate %.2f) -> WF %.2f (out: %s) / dyn WF %.2f -> %d Min",
+                    self.room_name, room_delta, check_temp,
+                    (self.data.cooling_rate or 0.0) * cool_lead_hrs,
+                    self.data.cooling_rate or 0.0,
+                    weather_factor,
+                    f"{out_temp:.1f}" if out_temp is not None else "n/a",
+                    weather_factor_dynamic,
+                    new_val,
+                )
 
         # IMPORTANT: Always return the currently calculated value,
         # not _last_reported_mins—otherwise, next_preheat_start will jump.
@@ -1011,11 +1036,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             if self.data.desired_temp <= MIN_TEMP + 0.5:
                 # Frost protection (5.0°C) – "Target reached" would be misleading here
                 _LOGGER.debug(
-                    "%s: Frost protection active (room %.1f >= %.1f). Holding %.1f",
+                    "[%s] Frost protection active (room %.1f >= %.1f). Holding %.1f",
                     self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target,
                 )
             else:
-                _LOGGER.debug("%s: Target reached (%.1f >= %.1f). Fix at %.1f",
+                _LOGGER.debug("[%s] Target reached (%.1f >= %.1f). Fix at %.1f",
                              self.room_name, self.data.external_temp, self.data.desired_temp, compensated_target)
 
             force_send_due_to_target_reached = True
@@ -1024,7 +1049,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             compensated_target = round(raw_target * 2) / 2
             force_send_due_to_target_reached = False
             
-            _LOGGER.debug("%s: Heating active. Target: %.1f, Offset: %.1f -> Compensated: %.1f",
+            _LOGGER.debug("[%s] Heating active. Target: %.1f, Offset: %.1f -> Compensated: %.1f",
                          self.room_name, self.data.desired_temp, self.data.offset, compensated_target)
 
         compensated_target = max(5.0, min(25.0, compensated_target))
@@ -1034,7 +1059,8 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         diff = abs(compensated_target - current_tado_target)
 
         if not force and not force_send_due_to_target_reached and diff < self.tolerance:
-            _LOGGER.debug("Change too small (%.2f < %.2f), no update necessary", diff, self.tolerance)
+            _LOGGER.debug("[%s] Change too small (%.2f < %.2f), no update necessary", self.room_name, diff, self.tolerance)
+
             return
 
         # 4. The actual command to the thermostat
@@ -1123,7 +1149,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
             and (now - self._window_closed_at).total_seconds() < 15 * 60
         ):
             _LOGGER.debug(
-                "%s: Learning paused (validated ventilation ended %.1f min ago)",
+                "[%s] Learning paused (validated ventilation ended %.1f min ago)",
                 self.room_name,
                 (now - self._window_closed_at).total_seconds() / 60,
             )
@@ -1137,7 +1163,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         # 2. FILTER (to prevent too small/wrong numbers)
         if duration_hrs < 0.25 or temp_diff < 0.2 or instant_rate < 0.4:
             _LOGGER.debug(
-                "%s: Cycle ignored - Duration: %.2fh, Delta: %.2f°C, Rate: %.2f°C/h (Thresholds not met)", 
+                "[%s] Cycle ignored - Duration: %.2fh, Delta: %.2f°C, Rate: %.2f°C/h (Thresholds not met)", 
                 self.room_name, duration_hrs, temp_diff, instant_rate
             )
             return None
