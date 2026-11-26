@@ -1195,6 +1195,26 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         )
         return instant_rate
 
+    @staticmethod
+    def _trimmed_mean(values: list) -> float:
+        """Robust average for learned rate histories (cooling).
+
+        Ventilation artefacts (door left ajar, quick burst airing) can slip
+        past the MAX_COOLING_RATE plausibility filter and badly distort a
+        plain mean — observed factor ~2 in the bathroom history
+        (single 0.98 sample lifted the mean from ~0.14 to ~0.25).
+        Trim the lowest and highest sample before averaging; keep the
+        plain mean for small histories where trimming would discard
+        too much of the signal.
+        NOTE: heating deliberately stays on the plain mean for now to
+        preserve the ongoing two-week observation baseline.
+        """
+        if len(values) < 3:
+            return sum(values) / len(values)
+        ordered = sorted(values)
+        trimmed = ordered[1:-1]
+        return sum(trimmed) / len(trimmed)
+
     def _calculate_instant_cooling_rate(self, current_temp: float) -> float | None:
         """Determine the cooling rate from phases without active heating (case-specific)."""
         if self._cooling_start_time is None or self._cooling_start_temp is None:
@@ -1236,7 +1256,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         if len(self.data.cooling_history) > self.max_heating_cycles:
             self.data.cooling_history.pop(0)
 
-        self.data.cooling_rate = sum(self.data.cooling_history) / len(self.data.cooling_history)
+        self.data.cooling_rate = self._trimmed_mean(self.data.cooling_history)
         self.hass.async_create_task(self._async_save_data())
 
         _LOGGER.info(
@@ -1262,7 +1282,7 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         cooling_hist = (stored_data or {}).get("cooling_history")
         if cooling_hist:
             self.data.cooling_history = cooling_hist
-            self.data.cooling_rate = sum(cooling_hist) / len(cooling_hist)
+            self.data.cooling_rate = self._trimmed_mean(cooling_hist)
             _LOGGER.info(
                 "Historical cooling data for %s loaded. Current rate: %.4f °C/h",
                 self.room_name, self.data.cooling_rate,
