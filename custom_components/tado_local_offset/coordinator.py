@@ -229,6 +229,15 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
         self._last_compensation_time: datetime | None = None
         self._last_sent_compensated_target: float | None = None
         self._cycle_learned: bool = False
+        # --- Outlier-burst tracking (heating) ---
+        # A burst phase can span many 30 s cycles with rates above the
+        # plausibility cap. Track it once instead of logging every cycle:
+        # first occurrence -> INFO, subsequent rejections -> silent,
+        # summary line when the burst ends (rate drops below the cap).
+        self._outlier_burst_active: bool = False
+        self._outlier_peak: float = 0.0
+        self._outlier_started: datetime | None = None
+        self._outlier_count: int = 0
         self._cooling_cycle_learned: bool = False   # <<< NEW: Latch for cooling learning
         self._heating_start_time: datetime | None = None
         self._heating_start_temp: float | None = None
@@ -668,6 +677,11 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
                                 self._cycle_learned = False          # Release Latch
                                 self._heating_start_time = None      # Fresh Anchoring at Heat Onset
                                 self._heating_start_temp = None
+                                # <<< NEW: fresh burst bookkeeping per phase
+                                self._outlier_burst_active = False
+                                self._outlier_peak = 0.0
+                                self._outlier_started = None
+                                self._outlier_count = 0
                                 self.hass.async_create_task(
                                     self.async_force_compensation()
                                 )
@@ -1170,11 +1184,38 @@ class TadoLocalOffsetCoordinator(DataUpdateCoordinator[TadoLocalOffsetData]):
 
         # 3. SECURITY-FILTER
         if instant_rate > MAX_HEATING_RATE:
-            _LOGGER.info(
-                "Ignore outliers in %s: %.2f °C/h (Max: %.1f)", 
-                self.room_name, instant_rate, MAX_HEATING_RATE
-            )
+            if not self._outlier_burst_active:
+                # First occurrence in this phase -> announce once
+                self._outlier_burst_active = True
+                self._outlier_peak = instant_rate
+                self._outlier_started = now
+                self._outlier_count = 1
+                _LOGGER.info(
+                    "[%s] Heating rate above plausibility cap: rejecting samples "
+                    "while rate > %.1f °C/h (first %.2f °C/h observed)",
+                    self.room_name, MAX_HEATING_RATE, instant_rate,
+                )
+            else:
+                # Ongoing burst -> track silently
+                self._outlier_count += 1
+                if instant_rate > self._outlier_peak:
+                    self._outlier_peak = instant_rate
             return None
+        elif self._outlier_burst_active:
+            # Rate dropped below the cap -> burst ends, emit summary
+            _burst_min = 0.0
+            if self._outlier_started is not None:
+                _burst_min = (now - self._outlier_started).total_seconds() / 60
+            _LOGGER.info(
+                "[%s] Heating burst ended: %d samples rejected, peak %.2f °C/h "
+                "over %.0f min (cap %.1f °C/h)",
+                self.room_name, self._outlier_count, self._outlier_peak,
+                _burst_min, MAX_HEATING_RATE,
+            )
+            self._outlier_burst_active = False
+            self._outlier_peak = 0.0
+            self._outlier_started = None
+            self._outlier_count = 0
 
         # 4. SAVE DATA (just one time!)
         self._cycle_learned = True
